@@ -1,0 +1,4 @@
+id: entity.product
+name: Product
+description: A sellable product or service.
+related_concept_ids: [business_concept.product]

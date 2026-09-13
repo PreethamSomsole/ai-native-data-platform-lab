@@ -1,0 +1,4 @@
+id: entity.customer
+name: Customer
+description: A mastered customer record used for customer-level analysis.
+related_concept_ids: [business_concept.customer]

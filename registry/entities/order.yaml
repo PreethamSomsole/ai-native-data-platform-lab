@@ -1,0 +1,4 @@
+id: entity.order
+name: Order
+description: A commercial order and its lifecycle attributes.
+related_concept_ids: [business_concept.order]
