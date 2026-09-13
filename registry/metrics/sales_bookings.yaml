@@ -1,0 +1,10 @@
+id: metric.sales_bookings
+name: Sales bookings
+domain: sales
+definition: Value of orders booked in the sales system before completion or Finance revenue recognition.
+aliases: [booked sales, bookings]
+target_users: [sales leadership, sales operations]
+intended_use_cases: [sales pipeline reporting, bookings trend analysis]
+prohibited_use_cases: [financial reporting, completed-order revenue]
+related_concept_ids: [business_concept.revenue, business_concept.order]
+not_equivalent_to_ids: [metric.finance_net_revenue, metric.operations_net_revenue]
