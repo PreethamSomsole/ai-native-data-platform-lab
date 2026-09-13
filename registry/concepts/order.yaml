@@ -1,0 +1,4 @@
+id: business_concept.order
+name: Order
+description: A requested purchase of one or more products or services.
+synonyms: [purchase, transaction]

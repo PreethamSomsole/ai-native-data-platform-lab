@@ -1,0 +1,4 @@
+id: business_concept.product
+name: Product
+description: A sellable good or service offered to customers.
+synonyms: [sku, item]

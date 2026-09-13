@@ -1,0 +1,4 @@
+id: business_concept.region
+name: Region
+description: A geographic or organizational sales territory used for reporting.
+synonyms: [territory, geography]
