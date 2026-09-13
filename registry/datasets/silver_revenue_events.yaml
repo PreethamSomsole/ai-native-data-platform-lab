@@ -1,0 +1,17 @@
+id: silver.revenue_events
+name: Revenue events
+domain: finance
+layer: silver
+description: Uncertified Finance recognized revenue event stream for data engineering investigation and reconciliation.
+grain: source revenue event
+target_users: [data engineers, finance data stewards]
+supported_use_cases: [data quality investigation, reconciliation support]
+prohibited_use_cases: [external financial reporting, executive reporting]
+certification: uncertified
+owner: finance data engineering
+metric_ids: [metric.finance_net_revenue]
+entity_ids: [entity.customer, entity.order]
+dimension_concept_ids: [business_concept.region]
+freshness_sla: event ingestion within 30 minutes
+refresh_cadence: streaming micro-batch
+trust_signals: [source event traceability]

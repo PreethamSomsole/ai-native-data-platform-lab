@@ -1,0 +1,17 @@
+id: gold.order_revenue
+name: Completed order revenue by region
+domain: operations
+layer: gold
+description: Certified operational dataset for completed-order net revenue, order performance, and regional sales analysis.
+grain: completed order line and sales region
+target_users: [sales operations, order operations, regional managers]
+supported_use_cases: [operational performance monitoring, sales performance analysis, regional order analysis]
+prohibited_use_cases: [external financial reporting, accounting recognition]
+certification: certified
+owner: sales operations analytics
+metric_ids: [metric.operations_net_revenue]
+entity_ids: [entity.order, entity.customer, entity.product]
+dimension_concept_ids: [business_concept.region, business_concept.product]
+freshness_sla: hourly within 90 minutes
+refresh_cadence: hourly
+trust_signals: [completed-order reconciliation, certified operations KPI]

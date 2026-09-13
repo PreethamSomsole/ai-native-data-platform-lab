@@ -1,0 +1,17 @@
+id: gold.product_performance
+name: Product performance
+domain: product
+layer: gold
+description: Certified product and region performance dataset based on completed-order revenue.
+grain: product, sales region, and calendar month
+target_users: [product managers, sales operations]
+supported_use_cases: [product performance analysis, regional sales analysis]
+prohibited_use_cases: [financial reporting]
+certification: certified
+owner: product analytics
+metric_ids: [metric.operations_net_revenue]
+entity_ids: [entity.product, entity.order]
+dimension_concept_ids: [business_concept.region, business_concept.product]
+freshness_sla: daily by 10:00 UTC
+refresh_cadence: daily
+trust_signals: [certified product KPI]

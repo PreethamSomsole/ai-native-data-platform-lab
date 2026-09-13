@@ -1,0 +1,17 @@
+id: gold.monthly_sales
+name: Monthly sales bookings
+domain: sales
+layer: gold
+description: Certified monthly sales bookings trend dataset for sales leadership and pipeline review.
+grain: calendar month, sales region, and product
+target_users: [sales leadership, sales operations]
+supported_use_cases: [sales pipeline reporting, bookings trend analysis]
+prohibited_use_cases: [financial reporting, completed-order revenue]
+certification: certified
+owner: sales analytics
+metric_ids: [metric.sales_bookings]
+entity_ids: [entity.order, entity.product]
+dimension_concept_ids: [business_concept.region, business_concept.product]
+freshness_sla: daily by 07:00 UTC
+refresh_cadence: daily
+trust_signals: [sales operations certification]

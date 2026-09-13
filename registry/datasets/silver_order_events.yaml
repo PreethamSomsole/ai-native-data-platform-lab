@@ -1,0 +1,17 @@
+id: silver.order_events
+name: Order lifecycle events
+domain: orders
+layer: silver
+description: Uncertified order lifecycle event records used for pipeline troubleshooting and source reconciliation.
+grain: source order event
+target_users: [data engineers, order operations]
+supported_use_cases: [data quality investigation, source reconciliation]
+prohibited_use_cases: [certified operational KPI reporting, financial reporting]
+certification: uncertified
+owner: order data engineering
+metric_ids: [metric.operations_net_revenue]
+entity_ids: [entity.order, entity.customer]
+dimension_concept_ids: [business_concept.region]
+freshness_sla: event ingestion within 30 minutes
+refresh_cadence: streaming micro-batch
+trust_signals: [source event traceability]

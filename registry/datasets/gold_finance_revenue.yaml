@@ -1,0 +1,17 @@
+id: gold.finance_revenue
+name: Finance revenue reporting
+domain: finance
+layer: gold
+description: Certified Finance dataset for recognized net revenue reporting and quarterly financial analysis.
+grain: fiscal period, legal entity, sales region, and product
+target_users: [finance analysts, finance leadership, executive reporting]
+supported_use_cases: [financial reporting, quarter-end reporting, executive finance analysis]
+prohibited_use_cases: [operational order performance monitoring]
+certification: certified
+owner: finance analytics
+metric_ids: [metric.finance_net_revenue]
+entity_ids: [entity.customer, entity.product]
+dimension_concept_ids: [business_concept.region, business_concept.product]
+freshness_sla: daily by 08:00 UTC
+refresh_cadence: daily
+trust_signals: [reconciled to general ledger, certified for external reporting]

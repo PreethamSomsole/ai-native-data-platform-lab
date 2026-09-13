@@ -1,0 +1,17 @@
+id: gold.customer_financial_summary
+name: Customer financial summary
+domain: customer
+layer: gold
+description: Certified customer-level financial summary with recognized net revenue and customer value measures.
+grain: customer and fiscal month
+target_users: [customer strategy, finance analysts]
+supported_use_cases: [customer profitability analysis, customer finance analysis]
+prohibited_use_cases: [order fulfillment monitoring]
+certification: certified
+owner: customer analytics
+metric_ids: [metric.finance_net_revenue]
+entity_ids: [entity.customer]
+dimension_concept_ids: [business_concept.region]
+freshness_sla: daily by 09:00 UTC
+refresh_cadence: daily
+trust_signals: [certified customer financial calculation]
