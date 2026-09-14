@@ -1,6 +1,7 @@
 id: metric.finance_net_revenue
 name: Finance recognized net revenue
 domain: finance
+owner: finance analytics
 definition: Revenue recognized by Finance under the accounting recognition policy, net of approved adjustments.
 aliases: [recognized net revenue, finance revenue]
 target_users: [finance analysts, finance leadership, external reporting]
