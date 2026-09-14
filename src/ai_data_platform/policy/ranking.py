@@ -10,6 +10,8 @@ RANKING_WEIGHTS = {
     "use_case_match_cap": 8,
     "audience_match_per_term": 1,
     "audience_match_cap": 4,
+    "freshness_match_per_term": 2,
+    "freshness_match_cap": 6,
     "certified": 8,
     "gold_layer": 5,
     "ambiguity_similarity_ratio": 0.70,
