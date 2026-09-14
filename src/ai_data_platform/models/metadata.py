@@ -34,6 +34,7 @@ class Metric(MetadataModel):
     id: str
     name: str
     domain: str
+    owner: str
     definition: str
     aliases: list[str] = Field(default_factory=list)
     target_users: list[str] = Field(default_factory=list)
