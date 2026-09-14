@@ -1,4 +1,5 @@
 from ai_data_platform.discovery.service import (
+    Ambiguity,
     DatasetExclusion,
     DiscoveryResult,
     DiscoveryStatus,
@@ -9,6 +10,7 @@ from ai_data_platform.discovery.service import (
 )
 
 __all__ = [
+    "Ambiguity",
     "DatasetExclusion",
     "DiscoveryResult",
     "DiscoveryStatus",
