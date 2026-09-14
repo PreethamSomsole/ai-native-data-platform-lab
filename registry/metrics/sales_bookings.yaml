@@ -1,6 +1,7 @@
 id: metric.sales_bookings
 name: Sales bookings
 domain: sales
+owner: sales analytics
 definition: Value of orders booked in the sales system before completion or Finance revenue recognition.
 aliases: [booked sales, bookings]
 target_users: [sales leadership, sales operations]
