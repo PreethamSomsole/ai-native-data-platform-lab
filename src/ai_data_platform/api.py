@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-from ai_data_platform.discovery import (
-    Ambiguity,
-    DiscoveryResult,
-    MetricMatch,
-    assess_ambiguity as _assess_ambiguity,
-    discover_datasets as _discover_datasets,
-    resolve_metric as _resolve_metric,
-)
+from ai_data_platform.discovery import Ambiguity, DiscoveryResult, MetricMatch
+from ai_data_platform.discovery import assess_ambiguity as _assess_ambiguity
+from ai_data_platform.discovery import discover_datasets as _discover_datasets
+from ai_data_platform.discovery import resolve_metric as _resolve_metric
 from ai_data_platform.models import BusinessConcept, BusinessEntity, Dataset, Metric, Registry
 from ai_data_platform.validation import validate_registry as _validate_registry
 
