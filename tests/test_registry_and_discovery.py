@@ -48,14 +48,17 @@ class RegistryAndDiscoveryTests(unittest.TestCase):
             <= signals
         )
 
-    def test_operational_order_revenue_ranks_order_dataset_above_finance(self) -> None:
+    def test_operational_order_revenue_excludes_finance_dataset(self) -> None:
         result = discover_datasets(
             "Show operational order revenue by region.", self.registry, limit=10
         )
 
-        ranks = {candidate.dataset_id: index for index, candidate in enumerate(result.candidates)}
+        candidate_ids = {candidate.dataset_id for candidate in result.candidates}
+        excluded = {item.dataset_id: item.reasons for item in result.excluded_candidates}
         self.assertEqual(result.status, DiscoveryStatus.RESOLVED)
-        self.assertLess(ranks["gold.order_revenue"], ranks["gold.finance_revenue"])
+        self.assertIn("gold.order_revenue", candidate_ids)
+        self.assertNotIn("gold.finance_revenue", candidate_ids)
+        self.assertIn("gold.finance_revenue", excluded)
 
     def test_certified_gold_dataset_beats_similar_uncertified_silver_dataset(self) -> None:
         result = discover_datasets("What was Finance recognized net revenue?", self.registry)
@@ -73,13 +76,57 @@ class RegistryAndDiscoveryTests(unittest.TestCase):
         self.assertIn("gold.finance_revenue", candidate_ids)
         self.assertNotIn("gold.order_revenue", candidate_ids)
         self.assertIn("gold.order_revenue", excluded)
-        self.assertTrue(any("external financial reporting" in reason for reason in excluded["gold.order_revenue"]))
+        self.assertTrue(
+            any(
+                "external financial reporting" in reason
+                for reason in excluded["gold.order_revenue"]
+            )
+        )
+
+    def test_excluded_metric_does_not_create_false_ambiguity(self) -> None:
+        result = discover_datasets(
+            "Show net revenue for accounting recognition", self.registry, limit=10
+        )
+
+        excluded_ids = {item.dataset_id for item in result.excluded_candidates}
+        self.assertEqual(result.status, DiscoveryStatus.RESOLVED)
+        self.assertIsNone(result.ambiguity)
+        self.assertIsNotNone(result.resolved_metric)
+        self.assertEqual(result.resolved_metric.metric_id, "metric.finance_net_revenue")
+        self.assertIn("gold.order_revenue", excluded_ids)
+
+    def test_single_term_prohibited_use_case_is_enforced(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            registry_copy = self._registry_copy(temporary_directory)
+            dataset = registry_copy / "datasets" / "gold_order_revenue.yaml"
+            dataset.write_text(
+                dataset.read_text(encoding="utf-8").replace(
+                    "prohibited_use_cases: [external financial reporting, accounting recognition]",
+                    "prohibited_use_cases: [external financial reporting, accounting recognition, forecasting]",
+                ),
+                encoding="utf-8",
+            )
+            registry = load_registry(registry_copy)
+
+            result = discover_datasets(
+                "Show forecasting for operational order revenue", registry, limit=10
+            )
+
+            candidate_ids = {candidate.dataset_id for candidate in result.candidates}
+            excluded = {item.dataset_id: item.reasons for item in result.excluded_candidates}
+            self.assertNotIn("gold.order_revenue", candidate_ids)
+            self.assertIn("gold.order_revenue", excluded)
+            self.assertTrue(
+                any("forecasting" in reason for reason in excluded["gold.order_revenue"])
+            )
 
     def test_declared_freshness_can_contribute_to_ranking(self) -> None:
         result = discover_datasets("Show hourly operational order revenue", self.registry, limit=10)
 
         order_candidate = next(
-            candidate for candidate in result.candidates if candidate.dataset_id == "gold.order_revenue"
+            candidate
+            for candidate in result.candidates
+            if candidate.dataset_id == "gold.order_revenue"
         )
         signals = {reason.signal for reason in order_candidate.reasons}
         self.assertIn("freshness_expectation_match", signals)
@@ -143,7 +190,9 @@ class RegistryAndDiscoveryTests(unittest.TestCase):
                 "not_equivalent_to_ids: [metric.finance_net_revenue, metric.operations_net_revenue, metric.sales_bookings]",
             )
             metric.write_text(text, encoding="utf-8")
-            with self.assertRaisesRegex(RegistryValidationError, "cannot be marked non-equivalent to itself"):
+            with self.assertRaisesRegex(
+                RegistryValidationError, "cannot be marked non-equivalent to itself"
+            ):
                 load_registry(registry_copy)
 
     def test_asymmetric_non_equivalence_fails_validation(self) -> None:
@@ -156,7 +205,9 @@ class RegistryAndDiscoveryTests(unittest.TestCase):
                 "not_equivalent_to_ids: [metric.sales_bookings]",
             )
             metric.write_text(text, encoding="utf-8")
-            with self.assertRaisesRegex(RegistryValidationError, "Non-equivalence must be symmetric"):
+            with self.assertRaisesRegex(
+                RegistryValidationError, "Non-equivalence must be symmetric"
+            ):
                 load_registry(registry_copy)
 
     def test_duplicate_canonical_id_fails_validation(self) -> None:
