@@ -153,8 +153,12 @@ def _prohibited_use_conflicts(query: str, dataset: Dataset, registry: Registry) 
 
     conflicts: list[str] = []
     for source, use_case in prohibited:
-        overlap = query_terms & _terms(use_case)
-        if len(overlap) >= 2:
+        use_case_terms = _terms(use_case)
+        if not use_case_terms:
+            continue
+        overlap = query_terms & use_case_terms
+        required_overlap = min(2, len(use_case_terms))
+        if len(overlap) >= required_overlap:
             conflicts.append(
                 f"{source} prohibits use case '{use_case}' "
                 f"(matched: {', '.join(sorted(overlap))})"
@@ -337,7 +341,16 @@ def discover_datasets(question: str, registry: Registry, limit: int = 5) -> Disc
 
     candidates.sort(key=lambda candidate: (-candidate.score, candidate.dataset_id))
     exclusions.sort(key=lambda exclusion: exclusion.dataset_id)
-    ambiguity = assess_ambiguity(metric_match_list, registry)
+
+    surviving_metric_ids = {
+        metric_id
+        for candidate in candidates
+        for metric_id in registry.datasets[candidate.dataset_id].metric_ids
+    }
+    eligible_metric_matches = [
+        match for match in metric_match_list if match.metric_id in surviving_metric_ids
+    ]
+    ambiguity = assess_ambiguity(eligible_metric_matches, registry)
 
     if not candidates:
         return DiscoveryResult(
@@ -349,6 +362,8 @@ def discover_datasets(question: str, registry: Registry, limit: int = 5) -> Disc
         status=(DiscoveryStatus.CLARIFICATION_REQUIRED if ambiguity else DiscoveryStatus.RESOLVED),
         candidates=candidates[:limit],
         excluded_candidates=exclusions,
-        resolved_metric=None if ambiguity else metric_match_list[0] if metric_match_list else None,
+        resolved_metric=(
+            None if ambiguity else eligible_metric_matches[0] if eligible_metric_matches else None
+        ),
         ambiguity=ambiguity,
     )
