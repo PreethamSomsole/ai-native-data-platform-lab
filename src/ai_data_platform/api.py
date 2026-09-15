@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-from ai_data_platform.discovery import DiscoveryResult, discover_datasets as _discover_datasets
+from ai_data_platform.discovery import Ambiguity, DiscoveryResult, MetricMatch
+from ai_data_platform.discovery import assess_ambiguity as _assess_ambiguity
+from ai_data_platform.discovery import discover_datasets as _discover_datasets
 from ai_data_platform.discovery import resolve_metric as _resolve_metric
-from ai_data_platform.models import BusinessEntity, Dataset, Metric, Registry
+from ai_data_platform.models import BusinessConcept, BusinessEntity, Dataset, Metric, Registry
 from ai_data_platform.validation import validate_registry as _validate_registry
+
+
+def get_concept(concept_id: str, registry: Registry) -> BusinessConcept:
+    return registry.concepts[concept_id]
 
 
 def get_metric(metric_id: str, registry: Registry) -> Metric:
@@ -20,12 +26,16 @@ def get_dataset(dataset_id: str, registry: Registry) -> Dataset:
     return registry.datasets[dataset_id]
 
 
-def resolve_metric(query: str, registry: Registry):
+def resolve_metric(query: str, registry: Registry) -> list[MetricMatch]:
     return _resolve_metric(query, registry)
 
 
 def discover_datasets(question: str, registry: Registry, limit: int = 5) -> DiscoveryResult:
     return _discover_datasets(question, registry, limit)
+
+
+def assess_ambiguity(metric_matches: list[MetricMatch], registry: Registry) -> Ambiguity | None:
+    return _assess_ambiguity(metric_matches, registry)
 
 
 def validate_registry(registry: Registry) -> None:

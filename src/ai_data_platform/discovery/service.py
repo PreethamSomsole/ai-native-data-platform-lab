@@ -43,6 +43,11 @@ class DatasetCandidate(BaseModel):
     reasons: list[RankingReason]
 
 
+class DatasetExclusion(BaseModel):
+    dataset_id: str
+    reasons: list[str]
+
+
 class Ambiguity(BaseModel):
     reason: str
     conflicting_metrics: list[MetricMatch]
@@ -51,6 +56,7 @@ class Ambiguity(BaseModel):
 class DiscoveryResult(BaseModel):
     status: DiscoveryStatus
     candidates: list[DatasetCandidate] = Field(default_factory=list)
+    excluded_candidates: list[DatasetExclusion] = Field(default_factory=list)
     resolved_metric: MetricMatch | None = None
     ambiguity: Ambiguity | None = None
 
@@ -73,6 +79,7 @@ def _metric_document(metric: Metric) -> str:
             metric.id,
             metric.name,
             metric.domain,
+            metric.owner,
             metric.definition,
             _joined(metric.aliases),
             _joined(metric.target_users),
@@ -133,6 +140,32 @@ def _dataset_document(dataset: Dataset, registry: Registry) -> str:
     )
 
 
+def _prohibited_use_conflicts(query: str, dataset: Dataset, registry: Registry) -> list[str]:
+    query_terms = _terms(query)
+    prohibited: list[tuple[str, str]] = [
+        ("dataset", use_case) for use_case in dataset.prohibited_use_cases
+    ]
+    for metric_id in dataset.metric_ids:
+        prohibited.extend(
+            (metric_id, use_case)
+            for use_case in registry.metrics[metric_id].prohibited_use_cases
+        )
+
+    conflicts: list[str] = []
+    for source, use_case in prohibited:
+        use_case_terms = _terms(use_case)
+        if not use_case_terms:
+            continue
+        overlap = query_terms & use_case_terms
+        required_overlap = min(2, len(use_case_terms))
+        if len(overlap) >= required_overlap:
+            conflicts.append(
+                f"{source} prohibits use case '{use_case}' "
+                f"(matched: {', '.join(sorted(overlap))})"
+            )
+    return conflicts
+
+
 def _points_for_term_match(
     matched_terms: set[str], per_term_key: str, cap_key: str
 ) -> int:
@@ -164,7 +197,11 @@ def _rank_dataset(
             )
         )
 
-    supporting_matches = [metric_matches[metric_id] for metric_id in dataset.metric_ids if metric_id in metric_matches]
+    supporting_matches = [
+        metric_matches[metric_id]
+        for metric_id in dataset.metric_ids
+        if metric_id in metric_matches
+    ]
     if supporting_matches:
         best_match = max(supporting_matches, key=lambda match: match.score)
         metric_points = min(
@@ -214,6 +251,19 @@ def _rank_dataset(
             )
         )
 
+    freshness_terms = query_terms & _terms(f"{dataset.freshness_sla} {dataset.refresh_cadence}")
+    freshness_points = _points_for_term_match(
+        freshness_terms, "freshness_match_per_term", "freshness_match_cap"
+    )
+    if freshness_points:
+        reasons.append(
+            RankingReason(
+                signal="freshness_expectation_match",
+                points=freshness_points,
+                detail=f"Matched declared freshness terms: {', '.join(sorted(freshness_terms))}",
+            )
+        )
+
     # Governance signals improve the rank of a retrieved candidate; they must
     # never make unrelated metadata look like a search result.
     if not reasons:
@@ -253,12 +303,19 @@ def assess_ambiguity(metric_matches: list[MetricMatch], registry: Registry) -> A
     conflicts: list[MetricMatch] = []
     for match in comparable:
         metric = registry.metrics[match.metric_id]
-        if any(other.metric_id in metric.not_equivalent_to_ids for other in comparable if other != match):
+        if any(
+            other.metric_id in metric.not_equivalent_to_ids
+            for other in comparable
+            if other != match
+        ):
             conflicts.append(match)
     if len(conflicts) < 2:
         return None
     return Ambiguity(
-        reason="Multiple similarly relevant metrics are explicitly non-equivalent; choose the intended business definition.",
+        reason=(
+            "Multiple similarly relevant metrics are explicitly non-equivalent; "
+            "choose the intended business definition."
+        ),
         conflicting_metrics=conflicts,
     )
 
@@ -267,20 +324,46 @@ def discover_datasets(question: str, registry: Registry, limit: int = 5) -> Disc
     """Return an explained, deterministic top candidate set without guessing semantics."""
     if limit < 1:
         raise ValueError("limit must be at least 1")
+
     metric_match_list = resolve_metric(question, registry)
     metric_matches = {match.metric_id: match for match in metric_match_list}
-    candidates = [
-        candidate
-        for dataset in registry.datasets.values()
-        if (candidate := _rank_dataset(question, dataset, registry, metric_matches)) is not None
-    ]
+    candidates: list[DatasetCandidate] = []
+    exclusions: list[DatasetExclusion] = []
+
+    for dataset in registry.datasets.values():
+        conflicts = _prohibited_use_conflicts(question, dataset, registry)
+        if conflicts:
+            exclusions.append(DatasetExclusion(dataset_id=dataset.id, reasons=conflicts))
+            continue
+        candidate = _rank_dataset(question, dataset, registry, metric_matches)
+        if candidate is not None:
+            candidates.append(candidate)
+
     candidates.sort(key=lambda candidate: (-candidate.score, candidate.dataset_id))
-    ambiguity = assess_ambiguity(metric_match_list, registry)
+    exclusions.sort(key=lambda exclusion: exclusion.dataset_id)
+
+    surviving_metric_ids = {
+        metric_id
+        for candidate in candidates
+        for metric_id in registry.datasets[candidate.dataset_id].metric_ids
+    }
+    eligible_metric_matches = [
+        match for match in metric_match_list if match.metric_id in surviving_metric_ids
+    ]
+    ambiguity = assess_ambiguity(eligible_metric_matches, registry)
+
     if not candidates:
-        return DiscoveryResult(status=DiscoveryStatus.NO_MATCH)
+        return DiscoveryResult(
+            status=DiscoveryStatus.NO_MATCH,
+            excluded_candidates=exclusions,
+        )
+
     return DiscoveryResult(
         status=(DiscoveryStatus.CLARIFICATION_REQUIRED if ambiguity else DiscoveryStatus.RESOLVED),
         candidates=candidates[:limit],
-        resolved_metric=None if ambiguity else metric_match_list[0] if metric_match_list else None,
+        excluded_candidates=exclusions,
+        resolved_metric=(
+            None if ambiguity else eligible_metric_matches[0] if eligible_metric_matches else None
+        ),
         ambiguity=ambiguity,
     )

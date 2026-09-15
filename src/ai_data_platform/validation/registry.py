@@ -16,7 +16,7 @@ def _missing_ids(actual_ids: list[str], known_ids: set[str]) -> list[str]:
 
 
 def validate_registry(registry: Registry) -> None:
-    """Validate cross-file semantic references in a loaded registry."""
+    """Validate cross-file semantic references and relationship integrity."""
     errors: list[str] = []
     concept_ids = set(registry.concepts)
     entity_ids = set(registry.entities)
@@ -33,6 +33,15 @@ def validate_registry(registry: Registry) -> None:
             errors.append(f"{metric.id} references unknown metric '{missing_id}'")
         if metric.id in metric.not_equivalent_to_ids:
             errors.append(f"{metric.id} cannot be marked non-equivalent to itself")
+
+    for metric in registry.metrics.values():
+        for other_id in metric.not_equivalent_to_ids:
+            other = registry.metrics.get(other_id)
+            if other is not None and metric.id not in other.not_equivalent_to_ids:
+                errors.append(
+                    f"Non-equivalence must be symmetric: {metric.id} -> {other_id} "
+                    f"is missing reciprocal {other_id} -> {metric.id}"
+                )
 
     for dataset in registry.datasets.values():
         for missing_id in _missing_ids(dataset.metric_ids, metric_ids):

@@ -5,17 +5,27 @@ to add complexity only when the previous layer is understood, testable, and usef
 
 ## Milestone 1 — Semantic registry and deterministic discovery
 
-Status: implemented baseline.
+Status: implementation baseline plus semantic-governance hardening.
 
 Focus:
 - Git/YAML metadata as the declarative source of truth
 - canonical concepts, entities, metrics, and dataset contracts
+- explicit metric ownership
 - Pydantic domain models
 - structural and referential validation
+- symmetric semantic non-equivalence relationships
 - deterministic keyword/metadata retrieval
 - business-aware ranking
+- hard exclusion when a requested use case conflicts with an explicit prohibited use case
+- declared freshness/cadence as a ranking expectation signal
 - top-5 candidates with ranking explanations
 - semantic ambiguity detection and `CLARIFICATION_REQUIRED`
+- CI validation of registry integrity, tests, and linting
+
+Milestone 1 freshness is **declarative**: the registry can describe and rank against an
+expected cadence or SLA. It does not claim that a dataset is actually fresh at runtime.
+Observed freshness, pipeline health, row-count signals, and quality status belong to
+Milestone 3 runtime metadata.
 
 Key learning:
 

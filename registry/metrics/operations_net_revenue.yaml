@@ -1,10 +1,11 @@
 id: metric.operations_net_revenue
 name: Operations completed-order net revenue
 domain: operations
+owner: sales operations analytics
 definition: Net revenue from completed customer orders, used to monitor operational and sales performance.
 aliases: [operational revenue, order revenue]
 target_users: [sales operations, order operations, regional managers]
 intended_use_cases: [operational performance monitoring, sales performance analysis, regional order analysis]
 prohibited_use_cases: [external financial reporting, accounting recognition]
 related_concept_ids: [business_concept.revenue, business_concept.order]
-not_equivalent_to_ids: [metric.finance_net_revenue]
+not_equivalent_to_ids: [metric.finance_net_revenue, metric.sales_bookings]

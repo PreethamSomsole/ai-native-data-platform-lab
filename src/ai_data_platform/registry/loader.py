@@ -36,12 +36,12 @@ def _load_models(directory: Path, model_type: type[T], kind: str) -> dict[str, T
             try:
                 raw: Any = yaml.safe_load(file_path.read_text(encoding="utf-8"))
                 if not isinstance(raw, dict):
-                    raise ValueError("expected a YAML mapping")
+                    raise TypeError("expected a YAML mapping")
                 record = model_type.model_validate(raw)
-            except (OSError, ValueError, ValidationError, yaml.YAMLError) as error:
+            except (OSError, TypeError, ValueError, ValidationError, yaml.YAMLError) as error:
                 errors.append(f"{file_path}: invalid {kind} metadata: {error}")
                 continue
-            record_id = getattr(record, "id")
+            record_id = record.id
             if record_id in records:
                 errors.append(f"Duplicate {kind} ID '{record_id}' in {file_path}")
             else:
