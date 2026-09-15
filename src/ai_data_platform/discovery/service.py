@@ -295,6 +295,8 @@ def assess_ambiguity(metric_matches: list[MetricMatch], registry: Registry) -> A
     if len(metric_matches) < 2:
         return None
     leading_score = metric_matches[0].score
+    if leading_score < RANKING_WEIGHTS["ambiguity_min_score"]:
+        return None
     comparable = [
         match
         for match in metric_matches

@@ -123,8 +123,9 @@ ambiguity check
 LLM/agent reasoning or user clarification
 ```
 
-Milestone 1 uses deterministic keyword/metadata retrieval. Embeddings and hybrid search
-are deferred so they can be evaluated against a known baseline.
+Milestone 1 uses deterministic keyword/metadata retrieval. Milestone 2 retains that path
+as a baseline and adds provider-neutral embeddings, vector retrieval, and hybrid fusion
+so retrieval quality can be measured rather than assumed.
 
 ### 3.4 Business-aware ranking
 
@@ -180,6 +181,8 @@ get_entity(...)
 get_dataset(...)
 resolve_metric(...)
 discover_datasets(...)
+build_vector_index(...)
+discover_datasets_hybrid(...)
 validate_registry(...)
 ```
 
@@ -417,7 +420,45 @@ This milestone deliberately excludes LLMs and embeddings. The purpose is to make
 semantics and policy explicit and testable before adding probabilistic retrieval or
 reasoning.
 
-## 9. Roadmap
+## 9. Milestone 2 implementation
+
+Milestone 2 adds a probabilistic retrieval signal without allowing it to bypass semantic
+or governance rules:
+
+```text
+validated registry
+      ↓
+canonical documents for concepts / entities / metrics / datasets
+      ↓
+EmbeddingProvider
+      ↓
+in-memory cosine index
+      ↓
+M1 candidate rank + vector candidate rank
+      ↓
+weighted reciprocal-rank fusion
+      ↓
+prohibited-use exclusion + certification/layer policy
+      ↓
+ambiguity assessment + explained top candidates
+```
+
+The interfaces are intentionally small. A production-quality local model or managed
+embedding service can implement `EmbeddingProvider`; storage can later replace the
+in-memory index without changing registry semantics or discovery policy. The built-in
+hashing provider exists for deterministic development and CI, not as a production model.
+
+Reciprocal-rank fusion is used because deterministic scores and cosine similarity are not
+directly comparable. The deterministic path receives a higher fusion weight so adding a
+weak vector signal cannot silently degrade the known baseline. Prohibited-use conflicts
+remain hard exclusions, and explicitly non-equivalent metrics can still force
+`CLARIFICATION_REQUIRED`.
+
+Evaluation cases live in versioned YAML. The harness compares Recall@K, mean reciprocal
+rank, and expected discovery status for M1 and M2 using the same questions. This makes
+provider and threshold changes reviewable engineering decisions.
+
+## 10. Roadmap
 
 The planned sequence is documented in [roadmap.md](roadmap.md). At a high level:
 

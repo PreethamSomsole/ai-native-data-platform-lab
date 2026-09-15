@@ -35,6 +35,9 @@ Key learning:
 
 Add semantic retrieval without replacing the deterministic baseline.
 
+Status: reference implementation complete; expand the labeled corpus and evaluate a
+production-quality embedding adapter before treating retrieval quality as production-ready.
+
 Focus:
 - vendor-neutral embedding provider interface
 - embeddings for semantic registry content
@@ -42,6 +45,20 @@ Focus:
 - keyword + vector hybrid retrieval
 - candidate fusion / re-ranking
 - evaluation harness comparing M1 vs M2 retrieval quality
+
+Reference implementation:
+- `EmbeddingProvider` is the vendor-neutral model boundary
+- canonical documents cover concepts, entities, metrics, and datasets
+- `InMemoryVectorIndex` provides validated cosine retrieval for the lab
+- weighted reciprocal-rank fusion combines the full M1 rank with vector rank
+- deterministic ranking receives the higher fusion weight to protect the known baseline
+- prohibited-use exclusions and non-equivalence ambiguity rules run after retrieval
+- a dependency-free hashing provider makes local development and CI repeatable
+- versioned YAML cases compare Recall@K, mean reciprocal rank, and status accuracy
+
+The hashing provider validates architecture and integration, but it is not a substitute for
+evaluating a production semantic model. Similarity thresholds are provider- and corpus-specific
+and must be tuned against labeled cases.
 
 Important constraint:
 - certification, business use case, domain, and semantic policy still influence final

@@ -26,27 +26,34 @@ The platform becomes easier and safer for AI to operate
 
 ## Current milestone
 
-Milestone 1 establishes the vendor-neutral semantic foundation:
+Milestone 2 adds vector retrieval while retaining Milestone 1 as a measurable,
+deterministic baseline:
 
 ```text
 Git/YAML semantic registry
         ↓
-Pydantic domain models
+canonical semantic documents
         ↓
-Structural + referential validation
+provider-neutral embeddings
         ↓
-Deterministic retrieval
+deterministic retrieval + in-memory vector retrieval
         ↓
-Business-aware ranking
+weighted reciprocal-rank fusion
         ↓
-Top candidate set + explanations
+certification / layer / prohibited-use policy
         ↓
-Semantic ambiguity detection
+top candidates + explanations + semantic ambiguity detection
 ```
 
-There are intentionally **no LLMs, embeddings, vector databases, Snowflake, or
-Databricks dependencies yet**. We first want a deterministic baseline that makes the
-business semantics explicit and testable.
+The core owns no model-vendor SDK and requires no external vector database. The
+`EmbeddingProvider` protocol accepts a local or managed model, while the dependency-free
+`HashingEmbeddingProvider` keeps tests, examples, and CI reproducible. It is a reference
+provider rather than a claim of production semantic quality.
+
+The Milestone 1 path remains available as `discover_datasets()`. The new
+`discover_datasets_hybrid()` path fuses that baseline with vector results and applies
+deterministic exclusions and ambiguity policy after retrieval. Vector similarity is never
+the sole authority.
 
 A key acceptance case is deliberately ambiguous:
 
@@ -98,6 +105,8 @@ get_entity(entity_id, registry)
 get_dataset(dataset_id, registry)
 resolve_metric(query, registry)
 discover_datasets(question, registry, limit=5)
+build_vector_index(registry, embedding_provider)
+discover_datasets_hybrid(question, registry, vector_index, limit=5)
 validate_registry(registry)
 ```
 
@@ -117,21 +126,30 @@ src/ai_data_platform/
   models/         Pydantic contracts
   registry/       YAML loading and registry construction
   validation/     structural and referential validation
-  discovery/      retrieval, scoring, and ambiguity behavior
+  embeddings/     provider contract, semantic documents, and vector index
+  discovery/      deterministic/hybrid retrieval, scoring, and ambiguity behavior
   policy/         centralized ranking policy
   api.py          stable Python capability layer
 
+evaluation/       versioned retrieval relevance cases
 tests/            acceptance and unit tests
 ```
 
-## Run Milestone 1
+## Run Milestone 2
 
 ```bash
 python -m pip install -e .
 python -m ai_data_platform validate
 python -m ai_data_platform discover "What was net revenue last quarter?"
+python -m ai_data_platform discover "What was net revenue last quarter?" --mode hybrid
+python -m ai_data_platform evaluate
 python -m unittest discover -s tests -v
 ```
+
+The evaluation command reports Recall@K, mean reciprocal rank, and discovery-status
+accuracy for both the deterministic baseline and hybrid retrieval. The checked-in corpus
+is deliberately small; expanding it with domain-owner judgments is part of making the
+comparison representative rather than optimizing for a demo.
 
 ## Where this is going
 

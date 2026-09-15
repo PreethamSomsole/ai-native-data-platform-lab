@@ -14,5 +14,16 @@ RANKING_WEIGHTS = {
     "freshness_match_cap": 6,
     "certified": 8,
     "gold_layer": 5,
+    "ambiguity_min_score": 6,
     "ambiguity_similarity_ratio": 0.70,
+}
+
+
+HYBRID_RANKING_WEIGHTS = {
+    # A smaller constant than the web-search default keeps rank differences visible
+    # in this intentionally small registry while retaining RRF's scale independence.
+    "rrf_k": 10,
+    "rrf_scale": 1_000,
+    "deterministic_rrf_weight": 2,
+    "vector_rrf_weight": 1,
 }

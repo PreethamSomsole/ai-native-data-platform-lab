@@ -5,7 +5,13 @@ from __future__ import annotations
 from ai_data_platform.discovery import Ambiguity, DiscoveryResult, MetricMatch
 from ai_data_platform.discovery import assess_ambiguity as _assess_ambiguity
 from ai_data_platform.discovery import discover_datasets as _discover_datasets
+from ai_data_platform.discovery import discover_datasets_hybrid as _discover_datasets_hybrid
 from ai_data_platform.discovery import resolve_metric as _resolve_metric
+from ai_data_platform.embeddings import (
+    EmbeddingProvider,
+    InMemoryVectorIndex,
+    build_semantic_documents,
+)
 from ai_data_platform.models import BusinessConcept, BusinessEntity, Dataset, Metric, Registry
 from ai_data_platform.validation import validate_registry as _validate_registry
 
@@ -32,6 +38,31 @@ def resolve_metric(query: str, registry: Registry) -> list[MetricMatch]:
 
 def discover_datasets(question: str, registry: Registry, limit: int = 5) -> DiscoveryResult:
     return _discover_datasets(question, registry, limit)
+
+
+def build_vector_index(
+    registry: Registry, embedding_provider: EmbeddingProvider
+) -> InMemoryVectorIndex:
+    return InMemoryVectorIndex(build_semantic_documents(registry), embedding_provider)
+
+
+def discover_datasets_hybrid(
+    question: str,
+    registry: Registry,
+    vector_index: InMemoryVectorIndex,
+    *,
+    limit: int = 5,
+    vector_document_limit: int = 25,
+    min_similarity: float = 0.25,
+) -> DiscoveryResult:
+    return _discover_datasets_hybrid(
+        question,
+        registry,
+        vector_index,
+        limit=limit,
+        vector_document_limit=vector_document_limit,
+        min_similarity=min_similarity,
+    )
 
 
 def assess_ambiguity(metric_matches: list[MetricMatch], registry: Registry) -> Ambiguity | None:

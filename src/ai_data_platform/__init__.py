@@ -1,8 +1,10 @@
-"""Vendor-neutral semantic registry and deterministic dataset discovery."""
+"""Vendor-neutral semantic registry with deterministic and hybrid discovery."""
 
 from ai_data_platform.api import (
     assess_ambiguity,
+    build_vector_index,
     discover_datasets,
+    discover_datasets_hybrid,
     get_concept,
     get_dataset,
     get_entity,
@@ -14,7 +16,9 @@ from ai_data_platform.registry.loader import load_registry
 
 __all__ = [
     "assess_ambiguity",
+    "build_vector_index",
     "discover_datasets",
+    "discover_datasets_hybrid",
     "get_concept",
     "get_dataset",
     "get_entity",
