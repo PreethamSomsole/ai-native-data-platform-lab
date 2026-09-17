@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from collections.abc import Callable
 from pathlib import Path
+from unittest.mock import patch
 
 from httpx import ASGITransport, AsyncClient
 
@@ -12,7 +14,7 @@ from ai_data_platform import build_vector_index, load_registry
 from ai_data_platform.context import ContextService, DiscoveryMode
 from ai_data_platform.discovery import DiscoveryStatus
 from ai_data_platform.embeddings import HashingEmbeddingProvider
-from ai_data_platform.http import create_app
+from ai_data_platform.http import create_app, create_reasoning_service_from_env
 from ai_data_platform.reasoning import (
     CuratedReasoningContext,
     OpenAIResponsesReasoningProvider,
@@ -129,6 +131,92 @@ class ReasoningTests(unittest.TestCase):
         self.assertNotIn("healthier", result.explanation)
         self.assertFalse(provider.contexts[0].selection_allowed)
 
+    def test_ambiguity_discards_tentative_recommendations_without_selection(self) -> None:
+        provider = FakeProvider(
+            ReasoningDraft(
+                selected_dataset_id=None,
+                explanation="Prefer gold.finance_revenue because it is healthier.",
+                evidence_ids=[],
+                clarification_question="Should I use finance?",
+            )
+        )
+        service = ReasoningService(self.context_service, provider)
+        result = service.select_dataset(
+            "What was net revenue last quarter?",
+            mode=DiscoveryMode.DETERMINISTIC,
+        )
+
+        self.assertEqual(result.status, DiscoveryStatus.CLARIFICATION_REQUIRED)
+        self.assertIsNone(result.selected_dataset_id)
+        self.assertNotIn("Prefer", result.explanation)
+        self.assertNotIn("finance?", result.clarification_question)
+        self.assertIn(
+            "AMBIGUITY_RESPONSE_REPLACED",
+            {event.code for event in result.guardrail_events},
+        )
+
+    def test_selection_requires_evidence_tied_to_selected_candidate(self) -> None:
+        def mismatched_evidence(context: CuratedReasoningContext) -> ReasoningDraft:
+            selected = context.candidates[0].dataset_id
+            other = next(
+                candidate.dataset_id
+                for candidate in context.candidates
+                if candidate.dataset_id != selected
+            )
+            evidence_id = f"dataset:{other}:contract"
+            return ReasoningDraft(
+                selected_dataset_id=selected,
+                explanation="Selection with unrelated evidence.",
+                evidence_ids=[evidence_id],
+            )
+
+        service = ReasoningService(self.context_service, FakeProvider(mismatched_evidence))
+        with self.assertRaisesRegex(ReasoningPolicyError, "tied to the selected candidate"):
+            service.select_dataset(
+                "Finance recognized net revenue",
+                mode=DiscoveryMode.DETERMINISTIC,
+            )
+
+    def test_custom_provider_requires_platform_specific_api_key(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "AI_DATA_PLATFORM_LLM_BASE_URL": "https://llm.example/v1",
+                "AI_DATA_PLATFORM_LLM_MODEL": "custom-model",
+                "OPENAI_API_KEY": "openai-key",
+            },
+            clear=True,
+        ):
+            self.assertIsNone(create_reasoning_service_from_env(self.context_service))
+
+        with patch.dict(
+            os.environ,
+            {
+                "AI_DATA_PLATFORM_LLM_BASE_URL": "https://llm.example/v1",
+                "AI_DATA_PLATFORM_LLM_API_KEY": "custom-key",
+                "AI_DATA_PLATFORM_LLM_MODEL": "custom-model",
+                "OPENAI_API_KEY": "openai-key",
+            },
+            clear=True,
+        ):
+            service = create_reasoning_service_from_env(self.context_service)
+            self.assertIsNotNone(service)
+            self.assertEqual(service.provider.api_key, "custom-key")
+            self.assertEqual(service.provider.base_url, "https://llm.example/v1")
+
+    def test_default_openai_provider_may_use_openai_api_key(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "AI_DATA_PLATFORM_LLM_MODEL": "openai-model",
+                "OPENAI_API_KEY": "openai-key",
+            },
+            clear=True,
+        ):
+            service = create_reasoning_service_from_env(self.context_service)
+            self.assertIsNotNone(service)
+            self.assertEqual(service.provider.api_key, "openai-key")
+
     def test_no_match_abstains_without_calling_provider(self) -> None:
         provider = FakeProvider(select_first)
         service = ReasoningService(self.context_service, provider)
@@ -156,7 +244,7 @@ class ReasoningTests(unittest.TestCase):
                 mode=DiscoveryMode.DETERMINISTIC,
             )
 
-    def test_ambiguity_with_hallucinated_evidence_falls_back_safely(self) -> None:
+    def test_ambiguity_with_hallucinated_evidence_is_discarded_safely(self) -> None:
         provider = FakeProvider(
             ReasoningDraft(
                 selected_dataset_id=None,
@@ -171,7 +259,7 @@ class ReasoningTests(unittest.TestCase):
             mode=DiscoveryMode.DETERMINISTIC,
         )
         self.assertIsNone(result.selected_dataset_id)
-        self.assertEqual(result.guardrail_events[0].code, "UNGROUNDED_EVIDENCE_BLOCKED")
+        self.assertEqual(result.guardrail_events[0].code, "AMBIGUITY_RESPONSE_REPLACED")
         self.assertNotIn("Unsupported", result.explanation)
         self.assertTrue(result.evidence)
 
@@ -351,6 +439,13 @@ class ReasoningApiTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.post(
             "/v1/reasoning/dataset-selection",
             json={"question": "revenue", "limit": 6},
+        )
+        self.assertEqual(response.status_code, 422)
+
+    async def test_reasoning_endpoint_rejects_whitespace_only_question(self) -> None:
+        response = await self.client.post(
+            "/v1/reasoning/dataset-selection",
+            json={"question": "   ", "mode": "deterministic"},
         )
         self.assertEqual(response.status_code, 422)
 

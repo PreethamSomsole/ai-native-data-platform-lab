@@ -195,6 +195,9 @@ python -m ai_data_platform serve --state-dir var
 
 If the API key or model is absent, the context endpoints still run and the reasoning
 endpoint returns `503` rather than silently substituting a non-LLM implementation.
+For a custom `AI_DATA_PLATFORM_LLM_BASE_URL`, set
+`AI_DATA_PLATFORM_LLM_API_KEY` explicitly; the server never sends `OPENAI_API_KEY` to a
+custom endpoint.
 
 The service publishes OpenAPI documentation at `http://127.0.0.1:8000/docs`. Its main
 endpoints are:

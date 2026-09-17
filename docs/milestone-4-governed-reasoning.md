@@ -82,10 +82,11 @@ to HTTP `502`; hallucinated sources are never echoed as valid evidence.
 | `CLARIFICATION_REQUIRED` | Yes | Explanation and one clarification question; no selection |
 | `NO_MATCH` | No | Deterministic abstention |
 
-If the provider selects a dataset during `CLARIFICATION_REQUIRED`, the selection and its
-explanation are discarded. The service returns deterministic ambiguity language, a
-clarification question derived from conflicting canonical metrics, and a
-`SELECTION_BLOCKED_BY_AMBIGUITY` guardrail event.
+For `CLARIFICATION_REQUIRED`, provider prose, citations, and any attempted selection are
+discarded. The service returns deterministic ambiguity language, citations for the
+conflicting canonical metrics, and a clarification question derived from those metrics.
+This prevents a provider from embedding a tentative recommendation in otherwise
+well-formed free text.
 
 ## Configuration
 
@@ -93,13 +94,16 @@ The reasoning provider is optional. Configure it through environment variables:
 
 | Variable | Required | Meaning |
 |---|---|---|
-| `AI_DATA_PLATFORM_LLM_API_KEY` or `OPENAI_API_KEY` | Yes | Bearer token |
+| `AI_DATA_PLATFORM_LLM_API_KEY` | Required for custom URLs | Bearer token for any configured provider |
+| `OPENAI_API_KEY` | Allowed only for the default OpenAI URL | Fallback bearer token for `https://api.openai.com/v1` |
 | `AI_DATA_PLATFORM_LLM_MODEL` | Yes | Explicit model identifier |
 | `AI_DATA_PLATFORM_LLM_BASE_URL` | No | Defaults to `https://api.openai.com/v1` |
 | `AI_DATA_PLATFORM_LLM_TIMEOUT_SECONDS` | No | Defaults to `30` |
 
-Both an API key and model must be present. Otherwise the existing context endpoints remain
-available and the reasoning endpoint returns `503`.
+Both a model and an allowed credential must be present. A custom base URL requires
+`AI_DATA_PLATFORM_LLM_API_KEY` explicitly; `OPENAI_API_KEY` is never sent to a custom
+endpoint. Otherwise the existing context endpoints remain available and the reasoning
+endpoint returns `503`.
 
 ## API
 
@@ -129,8 +133,9 @@ recall and reasoning correctness are different concerns. `evaluate_reasoning()` 
 - provider/policy error rate
 
 Tests also exercise adversarial provider behavior: invented dataset IDs, invented evidence
-IDs, ambiguity override attempts, malformed structured responses, and a valid but incorrect
-source selection.
+IDs, citations unrelated to the selected dataset, ambiguity override attempts, tentative
+recommendations embedded in ambiguity prose, malformed structured responses, and a valid
+but incorrect source selection.
 
 ## Explicitly deferred
 

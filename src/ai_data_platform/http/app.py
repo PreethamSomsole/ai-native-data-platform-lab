@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ai_data_platform.api import build_vector_index
 from ai_data_platform.context import (
@@ -31,9 +31,19 @@ from ai_data_platform.runtime import (
     SQLiteRuntimeMetadataStore,
 )
 
+DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
+
 
 class HttpModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("question", check_fields=False)
+    @classmethod
+    def question_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("question must not be blank")
+        return value
 
 
 class DiscoveryRequest(HttpModel):
@@ -138,14 +148,23 @@ def create_reasoning_service_from_env(
     context_service: ContextService,
 ) -> ReasoningService | None:
     """Configure the optional reference provider without coupling it to the core service."""
-    api_key = os.getenv("AI_DATA_PLATFORM_LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
-    model = os.getenv("AI_DATA_PLATFORM_LLM_MODEL")
+    configured_base_url = os.getenv("AI_DATA_PLATFORM_LLM_BASE_URL")
+    base_url = (
+        configured_base_url.strip()
+        if configured_base_url and configured_base_url.strip()
+        else DEFAULT_OPENAI_BASE_URL
+    )
+    platform_api_key = (os.getenv("AI_DATA_PLATFORM_LLM_API_KEY") or "").strip() or None
+    openai_api_key = (os.getenv("OPENAI_API_KEY") or "").strip() or None
+    is_default_openai_url = base_url.rstrip("/") == DEFAULT_OPENAI_BASE_URL.rstrip("/")
+    api_key = platform_api_key or (openai_api_key if is_default_openai_url else None)
+    model = (os.getenv("AI_DATA_PLATFORM_LLM_MODEL") or "").strip() or None
     if not api_key or not model:
         return None
     provider = OpenAIResponsesReasoningProvider(
         api_key=api_key,
         model=model,
-        base_url=os.getenv("AI_DATA_PLATFORM_LLM_BASE_URL", "https://api.openai.com/v1"),
+        base_url=base_url,
         timeout_seconds=float(os.getenv("AI_DATA_PLATFORM_LLM_TIMEOUT_SECONDS", "30")),
     )
     return ReasoningService(context_service, provider)
@@ -176,4 +195,3 @@ def create_default_app() -> FastAPI:
         context_service,
         create_reasoning_service_from_env(context_service),
     )
-
