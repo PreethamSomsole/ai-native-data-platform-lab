@@ -111,6 +111,8 @@ Tests cover the protocol-independent service and the MCP registration layer:
 - read-only/non-destructive annotations
 - generated input bounds and absence of a caller-controlled registry path
 - structured MCP results and stable tool-error translation
+- real CLI/stdio initialization, tool listing, success, and wire-level error results
+- deterministic SQLite/DuckDB cleanup through the MCP server lifespan
 
 ## Explicitly deferred
 

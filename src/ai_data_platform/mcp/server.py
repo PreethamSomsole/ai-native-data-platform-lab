@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+from collections.abc import AsyncIterator, Callable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -39,6 +41,8 @@ READ_ONLY_ANNOTATIONS = ToolAnnotations(
     openWorldHint=False,
 )
 
+ServerLifespan = Callable[[MCPServer], AbstractAsyncContextManager[object]]
+
 
 def _tool_call(function, *args, **kwargs):
     try:
@@ -47,7 +51,11 @@ def _tool_call(function, *args, **kwargs):
         raise ToolError(str(error)) from error
 
 
-def create_mcp_server(tool_service: AgentToolService) -> MCPServer:
+def create_mcp_server(
+    tool_service: AgentToolService,
+    *,
+    lifespan: ServerLifespan | None = None,
+) -> MCPServer:
     """Register the stable agent capabilities as read-only MCP tools."""
     server = MCPServer(
         name="ai-native-data-platform",
@@ -57,6 +65,7 @@ def create_mcp_server(tool_service: AgentToolService) -> MCPServer:
             "and runtime context."
         ),
         version="0.5.0",
+        lifespan=lifespan,
     )
 
     @server.tool(
@@ -168,13 +177,29 @@ def create_mcp_server_from_paths(
     state_directory = Path(state_directory)
     state_directory.mkdir(parents=True, exist_ok=True)
     registry = load_registry(registry_path)
-    repository = RuntimeMetadataRepository(
-        SQLiteRuntimeMetadataStore(state_directory / "runtime-metadata.sqlite"),
-        DuckDBRuntimeHistoryStore(state_directory / "runtime-history.duckdb"),
-    )
     vector_index = build_vector_index(registry, HashingEmbeddingProvider())
+    current_store = SQLiteRuntimeMetadataStore(
+        state_directory / "runtime-metadata.sqlite"
+    )
+    history_store = DuckDBRuntimeHistoryStore(state_directory / "runtime-history.duckdb")
+    repository = RuntimeMetadataRepository(
+        current_store,
+        history_store,
+    )
     context_service = ContextService(registry, repository, vector_index)
-    return create_mcp_server(AgentToolService(context_service, registry_path))
+
+    @asynccontextmanager
+    async def lifespan(_: MCPServer) -> AsyncIterator[None]:
+        try:
+            yield None
+        finally:
+            history_store.close()
+            current_store.close()
+
+    return create_mcp_server(
+        AgentToolService(context_service, registry_path),
+        lifespan=lifespan,
+    )
 
 
 def create_default_mcp_server() -> MCPServer:

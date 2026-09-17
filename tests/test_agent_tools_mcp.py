@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import os
 import shutil
+import sys
 import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 
+from mcp import ClientSession
+from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.server.mcpserver.exceptions import ToolError
 
 from ai_data_platform import build_vector_index, load_registry
@@ -13,7 +17,7 @@ from ai_data_platform.agent_tools import AgentToolError, AgentToolService
 from ai_data_platform.context import ContextService, DiscoveryMode
 from ai_data_platform.discovery import DiscoveryStatus
 from ai_data_platform.embeddings import HashingEmbeddingProvider
-from ai_data_platform.mcp import create_mcp_server
+from ai_data_platform.mcp import create_mcp_server, create_mcp_server_from_paths
 from ai_data_platform.runtime import (
     DatasetRuntimeMetadata,
     DuckDBRuntimeHistoryStore,
@@ -171,6 +175,80 @@ class McpAdapterTests(unittest.IsolatedAsyncioTestCase):
                 "discover_datasets",
                 {"question": "revenue", "limit": 6},
             )
+
+
+class McpLifecycleAndStdioTests(unittest.IsolatedAsyncioTestCase):
+    async def test_path_factory_closes_owned_stores_and_allows_reopen(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            state_directory = Path(temporary_directory) / "state"
+            server = create_mcp_server_from_paths(REGISTRY_PATH, state_directory)
+            self.assertIsNotNone(server.settings.lifespan)
+            async with server.settings.lifespan(server):
+                response = await server.call_tool(
+                    "get_dataset_contract",
+                    {"dataset_id": "gold.finance_revenue"},
+                )
+                self.assertFalse(response.is_error)
+
+            reopened = create_mcp_server_from_paths(REGISTRY_PATH, state_directory)
+            self.assertIsNotNone(reopened.settings.lifespan)
+            async with reopened.settings.lifespan(reopened):
+                response = await reopened.call_tool("validate_metadata", {})
+                self.assertTrue(response.structured_content["valid"])
+
+    async def test_cli_stdio_initialize_list_success_and_wire_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            parameters = StdioServerParameters(
+                command=sys.executable,
+                args=[
+                    "-m",
+                    "ai_data_platform",
+                    "--registry",
+                    str(REGISTRY_PATH),
+                    "mcp",
+                    "--state-dir",
+                    temporary_directory,
+                ],
+                cwd=PROJECT_ROOT,
+                env=os.environ.copy(),
+            )
+            with tempfile.TemporaryFile(mode="w+") as stderr:
+                async with stdio_client(parameters, errlog=stderr) as (
+                    read_stream,
+                    write_stream,
+                ), ClientSession(read_stream, write_stream) as session:
+                    initialized = await session.initialize()
+                    self.assertEqual(
+                        initialized.server_info.name,
+                        "ai-native-data-platform",
+                    )
+
+                    catalog = await session.list_tools()
+                    self.assertIn(
+                        "discover_datasets",
+                        {tool.name for tool in catalog.tools},
+                    )
+
+                    success = await session.call_tool(
+                        "get_metric_definition",
+                        {"metric_id": "metric.finance_net_revenue"},
+                    )
+                    self.assertFalse(success.is_error)
+                    self.assertEqual(
+                        success.structured_content["metric"]["id"],
+                        "metric.finance_net_revenue",
+                    )
+
+                    failure = await session.call_tool(
+                        "get_metric_definition",
+                        {"metric_id": "metric.unknown"},
+                    )
+                    self.assertTrue(failure.is_error)
+                    self.assertIn("NOT_FOUND", failure.content[0].text)
+                stderr.seek(0)
+                stderr_output = stderr.read()
+                self.assertIn("NOT_FOUND", stderr_output)
+                self.assertNotIn("Traceback", stderr_output)
 
 
 if __name__ == "__main__":
