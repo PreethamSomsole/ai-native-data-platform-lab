@@ -35,6 +35,7 @@ class MetricMatch(BaseModel):
     definition: str
     score: int
     matched_terms: list[str]
+    retrieval_sources: list[str] = Field(default_factory=list)
 
 
 class DatasetCandidate(BaseModel):
@@ -106,6 +107,7 @@ def _match_metric(query: str, metric: Metric) -> MetricMatch:
         definition=metric.definition,
         score=score,
         matched_terms=matched_terms,
+        retrieval_sources=["deterministic"],
     )
 
 
@@ -295,8 +297,6 @@ def assess_ambiguity(metric_matches: list[MetricMatch], registry: Registry) -> A
     if len(metric_matches) < 2:
         return None
     leading_score = metric_matches[0].score
-    if leading_score < RANKING_WEIGHTS["ambiguity_min_score"]:
-        return None
     comparable = [
         match
         for match in metric_matches
@@ -307,6 +307,13 @@ def assess_ambiguity(metric_matches: list[MetricMatch], registry: Registry) -> A
         metric = registry.metrics[match.metric_id]
         if any(
             other.metric_id in metric.not_equivalent_to_ids
+            and (
+                set(match.matched_terms) & set(other.matched_terms)
+                or (
+                    any(source.startswith("vector") for source in match.retrieval_sources)
+                    and any(source.startswith("vector") for source in other.retrieval_sources)
+                )
+            )
             for other in comparable
             if other != match
         ):

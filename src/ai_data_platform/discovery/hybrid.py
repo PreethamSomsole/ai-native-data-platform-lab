@@ -83,24 +83,34 @@ def _hybrid_metric_matches(
     question: str,
     registry: Registry,
     vector_matches: list[VectorMatch],
+    vector_dataset_scores: dict[str, float],
 ) -> list[MetricMatch]:
     matches = {item.metric_id: item for item in resolve_metric(question, registry)}
+
+    def add_vector_evidence(metric_id: str, similarity: float, source: str) -> None:
+        metric = registry.metrics[metric_id]
+        vector_score = max(1, round(similarity * 10))
+        existing = matches.get(metric.id)
+        sources = sorted(set((existing.retrieval_sources if existing else []) + [source]))
+        matches[metric.id] = MetricMatch(
+            metric_id=metric.id,
+            name=metric.name,
+            domain=metric.domain,
+            definition=metric.definition,
+            score=max(existing.score if existing else 0, vector_score),
+            matched_terms=(existing.matched_terms if existing else []),
+            retrieval_sources=sources,
+        )
+
     for vector_match in vector_matches:
         document = vector_match.document
         if document.kind is not SemanticDocumentKind.METRIC:
             continue
-        metric = registry.metrics[document.record_id]
-        vector_score = max(1, round(vector_match.similarity * 10))
-        existing = matches.get(metric.id)
-        if existing is None or vector_score > existing.score:
-            matches[metric.id] = MetricMatch(
-                metric_id=metric.id,
-                name=metric.name,
-                domain=metric.domain,
-                definition=metric.definition,
-                score=vector_score,
-                matched_terms=(existing.matched_terms if existing else []),
-            )
+        add_vector_evidence(document.record_id, vector_match.similarity, "vector_metric")
+
+    for dataset_id, similarity in vector_dataset_scores.items():
+        for metric_id in registry.datasets[dataset_id].metric_ids:
+            add_vector_evidence(metric_id, similarity, "vector_dataset")
     return sorted(matches.values(), key=lambda item: (-item.score, item.metric_id))
 
 
@@ -127,6 +137,9 @@ def discover_datasets_hybrid(
         min_similarity=min_similarity,
     )
     vector_ranks = _vector_dataset_ranks(vector_matches, registry, excluded_ids)
+    vector_dataset_scores = {
+        dataset_id: similarity for dataset_id, similarity, _sources in vector_ranks
+    }
 
     reasons: dict[str, list[RankingReason]] = defaultdict(list)
     for rank, candidate in enumerate(baseline.candidates, start=1):
@@ -194,7 +207,9 @@ def discover_datasets_hybrid(
     }
     metric_matches = [
         match
-        for match in _hybrid_metric_matches(question, registry, vector_matches)
+        for match in _hybrid_metric_matches(
+            question, registry, vector_matches, vector_dataset_scores
+        )
         if match.metric_id in surviving_metric_ids
     ]
     ambiguity = assess_ambiguity(metric_matches, registry)

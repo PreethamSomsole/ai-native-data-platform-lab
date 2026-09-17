@@ -452,7 +452,10 @@ Reciprocal-rank fusion is used because deterministic scores and cosine similarit
 directly comparable. The deterministic path receives a higher fusion weight so adding a
 weak vector signal cannot silently degrade the known baseline. Prohibited-use conflicts
 remain hard exclusions, and explicitly non-equivalent metrics can still force
-`CLARIFICATION_REQUIRED`.
+`CLARIFICATION_REQUIRED`. Ambiguity uses shared query evidence rather than a raw score
+floor, so a broad query such as `revenue` remains ambiguous while unrelated one-term
+matches do not. Metrics implied by vector-retrieved datasets also participate even when
+their individual metric documents were not returned by vector search.
 
 Evaluation cases live in versioned YAML. The harness compares Recall@K, mean reciprocal
 rank, and expected discovery status for M1 and M2 using the same questions. This makes

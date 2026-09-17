@@ -91,6 +91,20 @@ def evaluate_retrieval(
     if not cases:
         raise ValueError("cases must contain at least one evaluation case")
 
+    unknown_dataset_ids = sorted(
+        {
+            dataset_id
+            for case in cases
+            for dataset_id in case.relevant_dataset_ids
+            if dataset_id not in registry.datasets
+        }
+    )
+    if unknown_dataset_ids:
+        raise ValueError(
+            "evaluation cases reference unknown dataset IDs: "
+            + ", ".join(unknown_dataset_ids)
+        )
+
     deterministic_results = [discover_datasets(case.question, registry, limit=k) for case in cases]
     hybrid_results = [
         discover_datasets_hybrid(

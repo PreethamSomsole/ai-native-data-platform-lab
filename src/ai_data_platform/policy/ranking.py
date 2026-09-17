@@ -14,7 +14,6 @@ RANKING_WEIGHTS = {
     "freshness_match_cap": 6,
     "certified": 8,
     "gold_layer": 5,
-    "ambiguity_min_score": 6,
     "ambiguity_similarity_ratio": 0.70,
 }
 

@@ -41,9 +41,9 @@ class HashingEmbeddingProvider:
             vector = [0.0] * self.dimension
             for feature in self._features(text):
                 digest = hashlib.blake2b(feature.encode("utf-8"), digest_size=8).digest()
-                value = int.from_bytes(digest, byteorder="big", signed=False)
-                bucket = value % self.dimension
-                sign = 1.0 if value & 1 else -1.0
+                bucket_value = int.from_bytes(digest[:4], byteorder="big", signed=False)
+                bucket = bucket_value % self.dimension
+                sign = 1.0 if digest[4] & 1 else -1.0
                 vector[bucket] += sign
             norm = math.sqrt(sum(value * value for value in vector))
             if norm:

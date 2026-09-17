@@ -102,6 +102,21 @@ class RegistryAndDiscoveryTests(unittest.TestCase):
         self.assertEqual(result.candidates[0].dataset_id, "gold.customer_financial_summary")
         self.assertIsNone(result.ambiguity)
 
+    def test_broad_revenue_query_keeps_non_equivalent_metrics_ambiguous(self) -> None:
+        result = discover_datasets("revenue", self.registry)
+
+        self.assertEqual(result.status, DiscoveryStatus.CLARIFICATION_REQUIRED)
+        self.assertIsNotNone(result.ambiguity)
+        conflicts = {match.metric_id for match in result.ambiguity.conflicting_metrics}
+        self.assertEqual(
+            conflicts,
+            {
+                "metric.finance_net_revenue",
+                "metric.operations_net_revenue",
+                "metric.sales_bookings",
+            },
+        )
+
     def test_single_term_prohibited_use_case_is_enforced(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             registry_copy = self._registry_copy(temporary_directory)
