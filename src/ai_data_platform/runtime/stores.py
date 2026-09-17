@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
 from typing import Protocol
@@ -111,7 +112,7 @@ class DuckDBRuntimeHistoryStore:
             """
             CREATE TABLE IF NOT EXISTS dataset_runtime_history (
                 dataset_id VARCHAR NOT NULL,
-                observed_at TIMESTAMPTZ NOT NULL,
+                observed_at_epoch_us BIGINT NOT NULL,
                 row_count BIGINT,
                 freshness_status VARCHAR NOT NULL,
                 quality_status VARCHAR NOT NULL,
@@ -123,6 +124,7 @@ class DuckDBRuntimeHistoryStore:
         )
 
     def append(self, metadata: DatasetRuntimeMetadata) -> None:
+        observed_at_epoch_us = int(metadata.observed_at.timestamp() * 1_000_000)
         with self._lock:
             self._connection.execute(
                 """
@@ -130,7 +132,7 @@ class DuckDBRuntimeHistoryStore:
                 """,
                 [
                     metadata.dataset_id,
-                    metadata.observed_at,
+                    observed_at_epoch_us,
                     metadata.row_count,
                     metadata.freshness_status.value,
                     metadata.quality_status.value,
@@ -155,7 +157,7 @@ class DuckDBRuntimeHistoryStore:
                 SELECT payload
                 FROM dataset_runtime_history
                 WHERE dataset_id = ?
-                ORDER BY observed_at DESC
+                ORDER BY observed_at_epoch_us DESC
                 LIMIT ?
                 """,
                 [dataset_id, limit],
@@ -167,17 +169,20 @@ class DuckDBRuntimeHistoryStore:
         with self._lock:
             rows = self._connection.execute(
                 """
-                SELECT observed_at, row_count
+                SELECT observed_at_epoch_us, row_count
                 FROM dataset_runtime_history
                 WHERE dataset_id = ? AND row_count IS NOT NULL
-                ORDER BY observed_at DESC
+                ORDER BY observed_at_epoch_us DESC
                 LIMIT ?
                 """,
                 [dataset_id, limit],
             ).fetchall()
         return [
-            RowCountPoint(observed_at=observed_at, row_count=row_count)
-            for observed_at, row_count in reversed(rows)
+            RowCountPoint(
+                observed_at=datetime.fromtimestamp(observed_at_epoch_us / 1_000_000, tz=UTC),
+                row_count=row_count,
+            )
+            for observed_at_epoch_us, row_count in reversed(rows)
         ]
 
     def summarize(self, dataset_id: str) -> RuntimeAnalyticsSummary:
