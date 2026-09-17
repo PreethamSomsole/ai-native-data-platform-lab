@@ -26,29 +26,27 @@ The platform becomes easier and safer for AI to operate
 
 ## Current milestone
 
-Milestone 4 adds bounded LLM reasoning after governed retrieval and runtime-aware policy:
+Milestone 5 exposes the existing governed capabilities to agents through a read-only
+Model Context Protocol (MCP) adapter:
 
 ```text
-question
-   ↓
-deterministic / hybrid retrieval + runtime reranking
-   ↓
-semantic policy status + top 5 candidates
-   ↓
-typed candidate context + enumerated evidence catalog
-   ↓
-vendor-neutral reasoning provider
-   ↓
-post-model dataset/evidence validation
-   ↓
-selection + explanation + evidence OR governed clarification
+agent / MCP client
+       ↓
+validated, bounded tool arguments
+       ↓
+protocol-independent AgentToolService
+       ↓
+existing capability + ContextService layers
+       ↓
+Git/YAML semantics + runtime observations
+       ↓
+structured tool result with governed status and reasons
 ```
 
-The model never receives the full registry. It receives at most five already-eligible
-candidates plus stable evidence IDs for dataset contracts, metric definitions, entities,
-concepts, ranking reasons, and available runtime state. Provider output is untrusted:
-dataset IDs and evidence IDs are validated against the curated context before a result is
-returned.
+MCP contains no ranking, validation, or business policy of its own. It registers typed tool
+schemas and delegates every operation to the same capability and context services used by
+the Python and REST adapters. Discovery is capped at five candidates, registry paths remain
+server-controlled, and all published tools are annotated as read-only and non-destructive.
 
 A key acceptance case is deliberately ambiguous:
 
@@ -57,10 +55,8 @@ A key acceptance case is deliberately ambiguous:
 ```
 
 Finance recognized revenue and Operations completed-order revenue are different, valid
-business definitions. Deterministic policy returns `CLARIFICATION_REQUIRED`. The model
-may explain the ambiguity and ask a clarification question, but it cannot select or make
-a tentative recommendation. Any attempted override is discarded and recorded as a
-guardrail event.
+business definitions. `discover_datasets` still returns `CLARIFICATION_REQUIRED`; the
+agent interface cannot bypass that status or restore excluded candidates.
 
 ## Architecture principles
 
@@ -132,6 +128,8 @@ src/ai_data_platform/
   runtime/        typed observations, SQLite latest state, and DuckDB history
   context/        semantic + runtime context assembly
   reasoning/      curated evidence, provider contract, guardrails, and evaluation
+  agent_tools/    protocol-independent, read-only agent capability service
+  mcp/            thin MCP server and stdio entry point
   http/           thin FastAPI adapter
   policy/         centralized semantic, hybrid, and runtime ranking policy
   api.py          stable Python capability layer
@@ -140,7 +138,7 @@ evaluation/       versioned retrieval and reasoning evaluation cases
 tests/            acceptance and unit tests
 ```
 
-## Run Milestone 4
+## Run Milestone 5
 
 ```bash
 python -m pip install -e ".[test]"
@@ -150,7 +148,39 @@ python -m ai_data_platform discover "What was net revenue last quarter?" --mode 
 python -m ai_data_platform evaluate
 python -m unittest discover -s tests -v
 python -m ai_data_platform serve --state-dir var
+python -m ai_data_platform mcp --state-dir var
 ```
+
+The MCP server uses standard input/output and publishes seven structured, read-only tools:
+
+- `discover_datasets`
+- `get_dataset_contract`
+- `get_dataset_context`
+- `get_metric_definition`
+- `get_entity_definition`
+- `get_concept_definition`
+- `validate_metadata`
+
+An MCP client can launch the installed entry point with configuration like:
+
+```json
+{
+  "mcpServers": {
+    "ai-native-data-platform": {
+      "command": "ai-data-platform-mcp",
+      "env": {
+        "AI_DATA_PLATFORM_REGISTRY": "/absolute/path/to/registry",
+        "AI_DATA_PLATFORM_STATE_DIR": "/absolute/path/to/var"
+      }
+    }
+  }
+}
+```
+
+The registry and state paths are server configuration, never tool-call parameters. This
+prevents an agent from using the metadata tools as arbitrary filesystem readers. The MCP
+server does not expose metadata writes, SQL/query execution, deployment actions, or hidden
+LLM calls.
 
 The reference reasoning adapter uses an OpenAI-compatible Responses API with strict
 structured output. Configure it before starting the service:
@@ -179,7 +209,9 @@ endpoints are:
 See [Milestone 3 runtime context design](docs/milestone-3-runtime-context.md) for the
 storage boundary and ranking policy. See
 [Milestone 4 governed reasoning design](docs/milestone-4-governed-reasoning.md) for the
-provider boundary, evidence contract, guardrails, API, and evaluation approach.
+provider boundary, evidence contract, guardrails, API, and evaluation approach. See
+[Milestone 5 governed MCP tools](docs/milestone-5-governed-mcp-tools.md) for the tool
+contract, security boundary, configuration, and deferred capabilities.
 
 ## Where this is going
 

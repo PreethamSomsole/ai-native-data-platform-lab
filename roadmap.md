@@ -156,15 +156,29 @@ Principle:
 Expose existing core capabilities to AI agents without moving business logic into the
 agent interface.
 
-Potential tools:
+Status: reference read-only stdio implementation complete; authentication, authorization,
+remote transport, write tools, and production deployment remain future work.
+
+Reference implementation:
 - `discover_datasets()`
-- `get_metric_definition()`
 - `get_dataset_contract()`
+- `get_dataset_context()`
+- `get_metric_definition()`
 - `get_entity()`
-- `validate_metadata()`
-- `get_lineage()` when available
+- `get_concept_definition()`
+- `validate_metadata()` reloads only the server-configured registry
+
+The protocol-independent `AgentToolService` is the agent capability boundary. The MCP
+server registers strict input/output schemas, translates stable capability errors, caps
+discovery at five candidates, and marks every tool read-only, non-destructive, idempotent,
+and closed-world.
 
 MCP is an adapter around the capability layer, not the implementation of the platform.
+Git/YAML, deterministic semantic policy, runtime ranking, and context assembly remain in
+their existing layers. There is no raw filesystem, SQL, deployment, or metadata-write tool.
+
+Lineage is deliberately deferred until the registry has an explicit, validated lineage
+model. The interface must not imply lineage knowledge the platform does not yet possess.
 
 ## Milestone 6 — AI-native data engineering
 
