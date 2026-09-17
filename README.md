@@ -26,8 +26,8 @@ The platform becomes easier and safer for AI to operate
 
 ## Current milestone
 
-Milestone 5 exposes the existing governed capabilities to agents through a read-only
-Model Context Protocol (MCP) adapter:
+Milestone 6 adds the first governed, repository-scoped **AI-native data engineering**
+capabilities. They sit on the Milestone 5 read-only Model Context Protocol (MCP) adapter:
 
 ```text
 agent / MCP client
@@ -130,6 +130,7 @@ src/ai_data_platform/
   reasoning/      curated evidence, provider contract, guardrails, and evaluation
   agent_tools/    protocol-independent, read-only agent capability service
   mcp/            thin MCP server and stdio entry point
+  engineering/    deterministic, repository-scoped DEV engineering capabilities
   http/           thin FastAPI adapter
   policy/         centralized semantic, hybrid, and runtime ranking policy
   api.py          stable Python capability layer
@@ -138,7 +139,7 @@ evaluation/       versioned retrieval and reasoning evaluation cases
 tests/            acceptance and unit tests
 ```
 
-## Run Milestone 5
+## Run Milestone 6
 
 ```bash
 python -m pip install -e ".[test]"
@@ -150,6 +151,14 @@ python -m unittest discover -s tests -v
 python -m ai_data_platform serve --state-dir var
 python -m ai_data_platform mcp --state-dir var
 ```
+
+`EngineeringService` is a protocol-independent local DEV capability boundary. It
+recommends ingestion patterns, produces approval-aware pipeline plans, validates proposed
+dataset contracts, runs only configured validation profiles, reconciles bounded DuckDB
+tables, records content-hashed DEV deployment manifests, and performs transactional table
+replacement with deterministic rollback. It does not accept arbitrary commands or paths,
+write Git metadata, or execute QA/production changes. See [Milestone 6 governed
+engineering capabilities](docs/milestone-6-ai-native-engineering.md).
 
 The MCP server uses standard input/output and publishes seven structured, read-only tools:
 
