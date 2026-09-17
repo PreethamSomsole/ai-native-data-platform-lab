@@ -26,36 +26,29 @@ The platform becomes easier and safer for AI to operate
 
 ## Current milestone
 
-Milestone 3 combines governed declarative semantics with observed runtime state and
-exposes the result through a reusable context service:
+Milestone 4 adds bounded LLM reasoning after governed retrieval and runtime-aware policy:
 
 ```text
-Git/YAML semantics                 Runtime observations
-definitions / ownership           freshness / quality / health
-grain / use cases                 volume / usage / pipeline runs
-        │                                  │
-        │                         ┌────────┴────────┐
-        │                         │                 │
-        │                  SQLite latest     DuckDB history
-        │                         │                 │
-        └──────────────┬──────────┴─────────────────┘
-                       ↓
-             context capability layer
-                       ↓
-       explained runtime-aware reranking
-                       ↓
-              FastAPI REST adapter
+question
+   ↓
+deterministic / hybrid retrieval + runtime reranking
+   ↓
+semantic policy status + top 5 candidates
+   ↓
+typed candidate context + enumerated evidence catalog
+   ↓
+vendor-neutral reasoning provider
+   ↓
+post-model dataset/evidence validation
+   ↓
+selection + explanation + evidence OR governed clarification
 ```
 
-SQLite provides the request-time latest snapshot. DuckDB retains append-oriented history
-for row-count trends and analytical inspection. Both sit behind replaceable interfaces;
-neither becomes the source of truth for business semantics. Runtime freshness, quality,
-health, and usage adjust candidate rank through explicit `RankingReason` entries. They do
-not override prohibited-use exclusions or resolve semantic ambiguity.
-
-FastAPI is only an adapter. Context assembly, runtime persistence, and ranking remain
-callable Python capabilities so later MCP, Snowflake, or Databricks interfaces can reuse
-the same behavior.
+The model never receives the full registry. It receives at most five already-eligible
+candidates plus stable evidence IDs for dataset contracts, metric definitions, entities,
+concepts, ranking reasons, and available runtime state. Provider output is untrusted:
+dataset IDs and evidence IDs are validated against the curated context before a result is
+returned.
 
 A key acceptance case is deliberately ambiguous:
 
@@ -63,9 +56,11 @@ A key acceptance case is deliberately ambiguous:
 "What was net revenue last quarter?"
 ```
 
-Finance recognized revenue and Operations completed-order revenue are different,
-valid business definitions. The platform must return `CLARIFICATION_REQUIRED` rather
-than silently choosing one.
+Finance recognized revenue and Operations completed-order revenue are different, valid
+business definitions. Deterministic policy returns `CLARIFICATION_REQUIRED`. The model
+may explain the ambiguity and ask a clarification question, but it cannot select or make
+a tentative recommendation. Any attempted override is discarded and recorded as a
+guardrail event.
 
 ## Architecture principles
 
@@ -112,6 +107,8 @@ build_vector_index(registry, embedding_provider)
 discover_datasets_hybrid(question, registry, vector_index, limit=5)
 discover_datasets_hybrid_with_runtime(...)
 validate_registry(registry)
+ReasoningService(context_service, reasoning_provider).select_dataset(...)
+evaluate_reasoning(reasoning_service, cases)
 ```
 
 The business logic should remain behind this layer so future REST or MCP interfaces do
@@ -134,15 +131,16 @@ src/ai_data_platform/
   discovery/      deterministic/hybrid retrieval, scoring, and ambiguity behavior
   runtime/        typed observations, SQLite latest state, and DuckDB history
   context/        semantic + runtime context assembly
+  reasoning/      curated evidence, provider contract, guardrails, and evaluation
   http/           thin FastAPI adapter
   policy/         centralized semantic, hybrid, and runtime ranking policy
   api.py          stable Python capability layer
 
-evaluation/       versioned retrieval relevance cases
+evaluation/       versioned retrieval and reasoning evaluation cases
 tests/            acceptance and unit tests
 ```
 
-## Run Milestone 3
+## Run Milestone 4
 
 ```bash
 python -m pip install -e ".[test]"
@@ -154,17 +152,34 @@ python -m unittest discover -s tests -v
 python -m ai_data_platform serve --state-dir var
 ```
 
+The reference reasoning adapter uses an OpenAI-compatible Responses API with strict
+structured output. Configure it before starting the service:
+
+```bash
+export AI_DATA_PLATFORM_LLM_API_KEY="..."
+export AI_DATA_PLATFORM_LLM_MODEL="..."
+# Optional for another Responses API-compatible endpoint:
+export AI_DATA_PLATFORM_LLM_BASE_URL="https://api.openai.com/v1"
+python -m ai_data_platform serve --state-dir var
+```
+
+If the API key or model is absent, the context endpoints still run and the reasoning
+endpoint returns `503` rather than silently substituting a non-LLM implementation.
+
 The service publishes OpenAPI documentation at `http://127.0.0.1:8000/docs`. Its main
 endpoints are:
 
 - `POST /v1/runtime/observations` — record current state in SQLite and history in DuckDB
 - `POST /v1/discovery` — deterministic or hybrid discovery with explained runtime reranking
+- `POST /v1/reasoning/dataset-selection` — governed selection, explanation, and evidence
 - `GET /v1/datasets/{dataset_id}/context` — combined contract, semantics, runtime state,
   and row-count trend
 - `GET /v1/datasets/{dataset_id}/runtime/history` — recent observations
 
 See [Milestone 3 runtime context design](docs/milestone-3-runtime-context.md) for the
-storage boundary, ranking policy, API examples, and configuration.
+storage boundary and ranking policy. See
+[Milestone 4 governed reasoning design](docs/milestone-4-governed-reasoning.md) for the
+provider boundary, evidence contract, guardrails, API, and evaluation approach.
 
 ## Where this is going
 

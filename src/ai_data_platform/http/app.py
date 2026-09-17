@@ -16,6 +16,13 @@ from ai_data_platform.context import (
     DiscoveryMode,
 )
 from ai_data_platform.embeddings import HashingEmbeddingProvider
+from ai_data_platform.reasoning import (
+    DatasetSelectionResult,
+    OpenAIResponsesReasoningProvider,
+    ReasoningPolicyError,
+    ReasoningProviderError,
+    ReasoningService,
+)
 from ai_data_platform.registry.loader import load_registry
 from ai_data_platform.runtime import (
     DatasetRuntimeMetadata,
@@ -36,14 +43,24 @@ class DiscoveryRequest(HttpModel):
     min_similarity: float = Field(default=0.25, ge=-1.0, le=1.0)
 
 
+class ReasoningRequest(HttpModel):
+    question: str = Field(min_length=1)
+    mode: DiscoveryMode = DiscoveryMode.HYBRID
+    limit: int = Field(default=5, ge=1, le=5)
+    min_similarity: float = Field(default=0.25, ge=-1.0, le=1.0)
+
+
 class HealthResponse(HttpModel):
     status: str
 
 
-def create_app(context_service: ContextService) -> FastAPI:
+def create_app(
+    context_service: ContextService,
+    reasoning_service: ReasoningService | None = None,
+) -> FastAPI:
     app = FastAPI(
         title="AI-Native Data Platform Context Service",
-        version="0.3.0",
+        version="0.4.0",
     )
 
     @app.get("/health", response_model=HealthResponse)
@@ -60,6 +77,25 @@ def create_app(context_service: ContextService) -> FastAPI:
                 min_similarity=request.min_similarity,
             )
         except RuntimeError as error:
+            raise HTTPException(status_code=503, detail=str(error)) from error
+
+    @app.post(
+        "/v1/reasoning/dataset-selection",
+        response_model=DatasetSelectionResult,
+    )
+    def select_dataset(request: ReasoningRequest) -> DatasetSelectionResult:
+        if reasoning_service is None:
+            raise HTTPException(status_code=503, detail="reasoning provider is not configured")
+        try:
+            return reasoning_service.select_dataset(
+                request.question,
+                mode=request.mode,
+                limit=request.limit,
+                min_similarity=request.min_similarity,
+            )
+        except RuntimeError as error:
+            if isinstance(error, (ReasoningPolicyError, ReasoningProviderError)):
+                raise HTTPException(status_code=502, detail=str(error)) from error
             raise HTTPException(status_code=503, detail=str(error)) from error
 
     @app.get("/v1/datasets/{dataset_id}/context", response_model=DatasetContext)
@@ -98,6 +134,23 @@ def create_app(context_service: ContextService) -> FastAPI:
     return app
 
 
+def create_reasoning_service_from_env(
+    context_service: ContextService,
+) -> ReasoningService | None:
+    """Configure the optional reference provider without coupling it to the core service."""
+    api_key = os.getenv("AI_DATA_PLATFORM_LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
+    model = os.getenv("AI_DATA_PLATFORM_LLM_MODEL")
+    if not api_key or not model:
+        return None
+    provider = OpenAIResponsesReasoningProvider(
+        api_key=api_key,
+        model=model,
+        base_url=os.getenv("AI_DATA_PLATFORM_LLM_BASE_URL", "https://api.openai.com/v1"),
+        timeout_seconds=float(os.getenv("AI_DATA_PLATFORM_LLM_TIMEOUT_SECONDS", "30")),
+    )
+    return ReasoningService(context_service, provider)
+
+
 def create_default_app() -> FastAPI:
     """Build a configurable local reference service for Uvicorn's factory mode."""
     project_root = Path(__file__).resolve().parents[3]
@@ -118,5 +171,9 @@ def create_default_app() -> FastAPI:
         DuckDBRuntimeHistoryStore(duckdb_path),
     )
     vector_index = build_vector_index(registry, HashingEmbeddingProvider())
-    return create_app(ContextService(registry, repository, vector_index))
+    context_service = ContextService(registry, repository, vector_index)
+    return create_app(
+        context_service,
+        create_reasoning_service_from_env(context_service),
+    )
 

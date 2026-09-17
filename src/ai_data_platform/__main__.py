@@ -67,7 +67,7 @@ def main() -> int:
         return 0
     if args.command == "serve":
         from ai_data_platform.context import ContextService
-        from ai_data_platform.http import create_app
+        from ai_data_platform.http import create_app, create_reasoning_service_from_env
         from ai_data_platform.runtime import (
             DuckDBRuntimeHistoryStore,
             RuntimeMetadataRepository,
@@ -80,7 +80,11 @@ def main() -> int:
             DuckDBRuntimeHistoryStore(args.state_dir / "runtime-history.duckdb"),
         )
         index = build_vector_index(registry, HashingEmbeddingProvider())
-        app = create_app(ContextService(registry, repository, index))
+        context_service = ContextService(registry, repository, index)
+        app = create_app(
+            context_service,
+            create_reasoning_service_from_env(context_service),
+        )
         uvicorn.run(app, host=args.host, port=args.port)
         return 0
     if args.mode == "hybrid":

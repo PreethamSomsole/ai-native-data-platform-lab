@@ -501,11 +501,61 @@ canonical metrics/entities/concepts, latest runtime state, and row-count trends.
 FastAPI layer performs HTTP validation and status mapping only; it does not reimplement
 retrieval or policy.
 
-The reference service intentionally defers authentication, authorization, background
-collection, production database deployment, external catalog/orchestrator connectors,
-LLM reasoning, and MCP exposure. Those require explicit policy and deployment decisions.
+The Milestone 3 reference service intentionally deferred authentication, authorization,
+background collection, production database deployment, external catalog/orchestrator
+connectors, LLM reasoning, and MCP exposure. Milestone 4 adds only the bounded reasoning
+capability; the other deployment concerns remain deferred.
 
-## 11. Roadmap
+## 11. Milestone 4 implementation
+
+Milestone 4 introduces a probabilistic reasoner without transferring semantic authority
+to it:
+
+```text
+question
+   ↓
+ContextService discovery
+   ↓
+deterministic status + top 5 eligible candidates
+   ↓
+CuratedReasoningContext + evidence catalog
+   ↓
+DatasetReasoningProvider
+   ↓
+untrusted ReasoningDraft
+   ↓
+post-generation policy validation
+   ↓
+DatasetSelectionResult
+```
+
+`DatasetReasoningProvider` is the vendor-neutral boundary. The reference adapter calls a
+Responses API-compatible endpoint and uses strict JSON Schema output, but the core service
+does not depend on an OpenAI SDK or a specific model. Provider configuration belongs to
+the application adapter rather than the domain model.
+
+The curated context contains no more than five candidates. It includes the contract and
+canonical semantics needed for comparison, current runtime state when available, the
+deterministic ranking reasons, and stable evidence IDs. The model must cite those evidence
+IDs instead of inventing free-form sources.
+
+Model output is treated as untrusted input. `ReasoningService` rejects dataset IDs outside
+the candidate set and evidence IDs outside the catalog. A resolved question requires one
+selected candidate and at least one valid evidence reference. A no-match outcome skips the
+provider entirely.
+
+For `CLARIFICATION_REQUIRED`, the provider may explain the ambiguity and formulate one
+question, but `selected_dataset_id` must remain null. If a provider attempts a selection,
+the model explanation is discarded, deterministic clarification is returned, and a
+guardrail event records the override attempt. Runtime health and popularity still cannot
+choose between explicitly non-equivalent business definitions.
+
+The reasoning evaluation corpus is versioned separately from retrieval cases. Its harness
+reports discovery-status accuracy, expected-source selection accuracy, safe-abstention
+rate, grounded-response rate, and provider/policy error rate. This distinguishes a model
+that produces valid JSON from one that chooses the right governed source.
+
+## 12. Roadmap
 
 The planned sequence is documented in [roadmap.md](roadmap.md). At a high level:
 

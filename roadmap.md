@@ -113,6 +113,10 @@ Important constraints:
 
 Introduce an LLM only after retrieval and policy are working independently.
 
+Status: reference implementation complete; production model evaluation, prompt/model
+version tracking, authentication, rate limiting, and operational telemetry remain future
+hardening work.
+
 Focus:
 - provide the LLM only the top relevant candidates
 - structured context assembly
@@ -120,6 +124,27 @@ Focus:
 - explanation of selection
 - explicit abstention when semantic policy says clarification is required
 - evaluation for hallucination and incorrect source selection
+
+Reference implementation:
+- `DatasetReasoningProvider` defines a vendor-neutral model boundary
+- an OpenAI-compatible Responses API adapter requests strict structured output
+- structured assembly exposes at most five candidates and an enumerated evidence catalog
+- the reasoning scope is dataset selection, explanation, and evidence only
+- returned dataset and evidence IDs are validated against the supplied context
+- `NO_MATCH` abstains without calling the model
+- `CLARIFICATION_REQUIRED` permits explanation and a clarification question but never
+  dataset selection or a tentative recommendation
+- attempted ambiguity overrides are discarded and surfaced through guardrail events
+- versioned evaluation cases measure status accuracy, selection accuracy, safe abstention,
+  grounded responses, and provider/policy errors
+
+Important constraints:
+- the LLM cannot restore excluded candidates or introduce registry objects
+- deterministic discovery status remains authoritative after generation
+- the reference provider is optional configuration; missing credentials never trigger a
+  hidden fallback
+- analytical answers, SQL generation, query execution, MCP, and agent actions remain out
+  of scope
 
 Principle:
 

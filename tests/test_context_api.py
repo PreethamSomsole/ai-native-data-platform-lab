@@ -104,6 +104,12 @@ class ContextApiTests(unittest.IsolatedAsyncioTestCase):
         missing = await self.client.get("/v1/datasets/gold.unknown/context")
         self.assertEqual(missing.status_code, 404)
 
+        reasoning = await self.client.post(
+            "/v1/reasoning/dataset-selection",
+            json={"question": "Finance recognized net revenue"},
+        )
+        self.assertEqual(reasoning.status_code, 503)
+
 
 if __name__ == "__main__":
     unittest.main()
