@@ -1,10 +1,12 @@
-"""Vendor-neutral semantic registry with deterministic and hybrid discovery."""
+"""Vendor-neutral semantic context platform with governed runtime-aware discovery."""
 
 from ai_data_platform.api import (
     assess_ambiguity,
     build_vector_index,
     discover_datasets,
     discover_datasets_hybrid,
+    discover_datasets_hybrid_with_runtime,
+    discover_datasets_with_runtime,
     get_concept,
     get_dataset,
     get_entity,
@@ -19,6 +21,8 @@ __all__ = [
     "build_vector_index",
     "discover_datasets",
     "discover_datasets_hybrid",
+    "discover_datasets_hybrid_with_runtime",
+    "discover_datasets_with_runtime",
     "get_concept",
     "get_dataset",
     "get_entity",

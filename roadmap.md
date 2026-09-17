@@ -68,6 +68,9 @@ Important constraint:
 
 Separate declarative semantics from observed runtime state.
 
+Status: reference implementation complete; production connectors, authentication, and
+managed deployment remain future work.
+
 Declarative metadata remains in Git:
 - definitions
 - ownership
@@ -85,6 +88,26 @@ Runtime metadata is added separately:
 - operational health
 
 Expose a reusable context service/API that combines both sources.
+
+Reference implementation:
+- typed, timezone-aware runtime observations
+- SQLite latest-state store for request-time context
+- DuckDB append history for trends and analytical inspection
+- replaceable current-state and history store interfaces
+- deterministic runtime ranking policy for freshness, quality, health, and usage
+- an explained adjustment for every runtime signal that changes rank
+- runtime-aware deterministic and hybrid discovery capabilities
+- context assembly joining dataset contracts, canonical semantics, runtime state, and
+  row-count history
+- FastAPI health, observation ingestion, discovery, dataset context, and history endpoints
+- configurable local persistence and a CLI service runner
+
+Important constraints:
+- Git/YAML remains authoritative for business meaning and governance intent.
+- Runtime signals may rerank candidates but do not bypass prohibited-use exclusions.
+- Runtime signals do not choose between explicitly non-equivalent business definitions;
+  `CLARIFICATION_REQUIRED` remains authoritative.
+- FastAPI is an adapter around the capability layer rather than a second implementation.
 
 ## Milestone 4 — LLM reasoning over curated context
 

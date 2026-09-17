@@ -13,6 +13,8 @@ from ai_data_platform.embeddings import (
     build_semantic_documents,
 )
 from ai_data_platform.models import BusinessConcept, BusinessEntity, Dataset, Metric, Registry
+from ai_data_platform.runtime.ranking import rerank_with_runtime
+from ai_data_platform.runtime.stores import RuntimeMetadataStore
 from ai_data_platform.validation import validate_registry as _validate_registry
 
 
@@ -40,6 +42,17 @@ def discover_datasets(question: str, registry: Registry, limit: int = 5) -> Disc
     return _discover_datasets(question, registry, limit)
 
 
+def discover_datasets_with_runtime(
+    question: str,
+    registry: Registry,
+    runtime_store: RuntimeMetadataStore,
+    *,
+    limit: int = 5,
+) -> DiscoveryResult:
+    result = _discover_datasets(question, registry, max(1, len(registry.datasets)))
+    return rerank_with_runtime(result, runtime_store, limit=limit)
+
+
 def build_vector_index(
     registry: Registry, embedding_provider: EmbeddingProvider
 ) -> InMemoryVectorIndex:
@@ -63,6 +76,27 @@ def discover_datasets_hybrid(
         vector_document_limit=vector_document_limit,
         min_similarity=min_similarity,
     )
+
+
+def discover_datasets_hybrid_with_runtime(
+    question: str,
+    registry: Registry,
+    vector_index: InMemoryVectorIndex,
+    runtime_store: RuntimeMetadataStore,
+    *,
+    limit: int = 5,
+    vector_document_limit: int = 25,
+    min_similarity: float = 0.25,
+) -> DiscoveryResult:
+    result = _discover_datasets_hybrid(
+        question,
+        registry,
+        vector_index,
+        limit=max(1, len(registry.datasets)),
+        vector_document_limit=vector_document_limit,
+        min_similarity=min_similarity,
+    )
+    return rerank_with_runtime(result, runtime_store, limit=limit)
 
 
 def assess_ambiguity(metric_matches: list[MetricMatch], registry: Registry) -> Ambiguity | None:
