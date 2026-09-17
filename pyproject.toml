@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ai-native-data-platform"
-version = "0.1.0"
-description = "Vendor-neutral semantic registry and deterministic dataset discovery baseline."
+version = "0.2.0"
+description = "Vendor-neutral semantic registry with deterministic and hybrid dataset discovery."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

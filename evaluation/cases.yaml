@@ -1,0 +1,24 @@
+- id: ambiguous_net_revenue
+  question: What was net revenue last quarter?
+  relevant_dataset_ids: [gold.finance_revenue, gold.order_revenue]
+  expected_status: CLARIFICATION_REQUIRED
+
+- id: finance_recognized_revenue
+  question: What was Finance recognized net revenue last quarter?
+  relevant_dataset_ids: [gold.finance_revenue]
+  expected_status: RESOLVED
+
+- id: operational_order_revenue
+  question: Show operational order revenue by region.
+  relevant_dataset_ids: [gold.order_revenue]
+  expected_status: RESOLVED
+
+- id: monthly_sales_bookings
+  question: Show monthly sales bookings by product.
+  relevant_dataset_ids: [gold.monthly_sales]
+  expected_status: RESOLVED
+
+- id: customer_financial_summary
+  question: Find the certified customer financial summary.
+  relevant_dataset_ids: [gold.customer_financial_summary]
+  expected_status: RESOLVED
