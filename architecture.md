@@ -461,7 +461,51 @@ Evaluation cases live in versioned YAML. The harness compares Recall@K, mean rec
 rank, and expected discovery status for M1 and M2 using the same questions. This makes
 provider and threshold changes reviewable engineering decisions.
 
-## 10. Roadmap
+## 10. Milestone 3 implementation
+
+Milestone 3 separates versioned business meaning from frequently changing observations:
+
+```text
+Git/YAML registry                    Runtime producers
+definitions / ownership             pipelines / quality / usage
+grain / semantic policy                     │
+          │                        runtime observation
+          │                                 │
+          │                      ┌──────────┴──────────┐
+          │                      │                     │
+          │               SQLite latest        DuckDB history
+          │                      │                     │
+          └──────────────┬───────┴─────────────────────┘
+                         ↓
+                  ContextService
+                         ↓
+         runtime-aware discovery + dataset context
+                         ↓
+                 FastAPI adapter
+```
+
+SQLite is the operational read model: one latest observation per dataset, protected from
+out-of-order updates. DuckDB is the analytical history: every observation is appended so
+row-count trends and later health analysis do not burden the request-time store. Both are
+reference implementations behind small interfaces and can be replaced without changing
+the context contract.
+
+Runtime ranking is deliberately transparent. Freshness, quality, operational health, and
+usage add positive or negative `RankingReason` entries to candidates. Missing observations
+leave semantic rank unchanged. The policy runs after semantic retrieval and never removes
+prohibited-use exclusions, changes the ambiguity outcome, or treats popularity as business
+meaning.
+
+`ContextService` owns orchestration and validation. It combines dataset contracts,
+canonical metrics/entities/concepts, latest runtime state, and row-count trends. The
+FastAPI layer performs HTTP validation and status mapping only; it does not reimplement
+retrieval or policy.
+
+The reference service intentionally defers authentication, authorization, background
+collection, production database deployment, external catalog/orchestrator connectors,
+LLM reasoning, and MCP exposure. Those require explicit policy and deployment decisions.
+
+## 11. Roadmap
 
 The planned sequence is documented in [roadmap.md](roadmap.md). At a high level:
 

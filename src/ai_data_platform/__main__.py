@@ -6,6 +6,8 @@ import argparse
 import json
 from pathlib import Path
 
+import uvicorn
+
 from ai_data_platform import (
     build_vector_index,
     discover_datasets,
@@ -39,6 +41,12 @@ def main() -> int:
     )
     evaluate_parser.add_argument("--limit", type=int, default=5)
     evaluate_parser.add_argument("--min-similarity", type=float, default=0.25)
+    serve_parser = subparsers.add_parser("serve", help="Run the local context REST service.")
+    serve_parser.add_argument("--host", default="127.0.0.1")
+    serve_parser.add_argument("--port", type=int, default=8000)
+    serve_parser.add_argument(
+        "--state-dir", type=Path, default=Path("var"), help="SQLite and DuckDB directory."
+    )
     subparsers.add_parser("validate", help="Validate registry metadata and references.")
     args = parser.parse_args()
 
@@ -56,6 +64,24 @@ def main() -> int:
             min_similarity=args.min_similarity,
         )
         print(json.dumps(report.model_dump(mode="json"), indent=2))
+        return 0
+    if args.command == "serve":
+        from ai_data_platform.context import ContextService
+        from ai_data_platform.http import create_app
+        from ai_data_platform.runtime import (
+            DuckDBRuntimeHistoryStore,
+            RuntimeMetadataRepository,
+            SQLiteRuntimeMetadataStore,
+        )
+
+        args.state_dir.mkdir(parents=True, exist_ok=True)
+        repository = RuntimeMetadataRepository(
+            SQLiteRuntimeMetadataStore(args.state_dir / "runtime-metadata.sqlite"),
+            DuckDBRuntimeHistoryStore(args.state_dir / "runtime-history.duckdb"),
+        )
+        index = build_vector_index(registry, HashingEmbeddingProvider())
+        app = create_app(ContextService(registry, repository, index))
+        uvicorn.run(app, host=args.host, port=args.port)
         return 0
     if args.mode == "hybrid":
         index = build_vector_index(registry, HashingEmbeddingProvider())

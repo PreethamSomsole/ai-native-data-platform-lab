@@ -26,34 +26,36 @@ The platform becomes easier and safer for AI to operate
 
 ## Current milestone
 
-Milestone 2 adds vector retrieval while retaining Milestone 1 as a measurable,
-deterministic baseline:
+Milestone 3 combines governed declarative semantics with observed runtime state and
+exposes the result through a reusable context service:
 
 ```text
-Git/YAML semantic registry
-        ↓
-canonical semantic documents
-        ↓
-provider-neutral embeddings
-        ↓
-deterministic retrieval + in-memory vector retrieval
-        ↓
-weighted reciprocal-rank fusion
-        ↓
-certification / layer / prohibited-use policy
-        ↓
-top candidates + explanations + semantic ambiguity detection
+Git/YAML semantics                 Runtime observations
+definitions / ownership           freshness / quality / health
+grain / use cases                 volume / usage / pipeline runs
+        │                                  │
+        │                         ┌────────┴────────┐
+        │                         │                 │
+        │                  SQLite latest     DuckDB history
+        │                         │                 │
+        └──────────────┬──────────┴─────────────────┘
+                       ↓
+             context capability layer
+                       ↓
+       explained runtime-aware reranking
+                       ↓
+              FastAPI REST adapter
 ```
 
-The core owns no model-vendor SDK and requires no external vector database. The
-`EmbeddingProvider` protocol accepts a local or managed model, while the dependency-free
-`HashingEmbeddingProvider` keeps tests, examples, and CI reproducible. It is a reference
-provider rather than a claim of production semantic quality.
+SQLite provides the request-time latest snapshot. DuckDB retains append-oriented history
+for row-count trends and analytical inspection. Both sit behind replaceable interfaces;
+neither becomes the source of truth for business semantics. Runtime freshness, quality,
+health, and usage adjust candidate rank through explicit `RankingReason` entries. They do
+not override prohibited-use exclusions or resolve semantic ambiguity.
 
-The Milestone 1 path remains available as `discover_datasets()`. The new
-`discover_datasets_hybrid()` path fuses that baseline with vector results and applies
-deterministic exclusions and ambiguity policy after retrieval. Vector similarity is never
-the sole authority.
+FastAPI is only an adapter. Context assembly, runtime persistence, and ranking remain
+callable Python capabilities so later MCP, Snowflake, or Databricks interfaces can reuse
+the same behavior.
 
 A key acceptance case is deliberately ambiguous:
 
@@ -105,8 +107,10 @@ get_entity(entity_id, registry)
 get_dataset(dataset_id, registry)
 resolve_metric(query, registry)
 discover_datasets(question, registry, limit=5)
+discover_datasets_with_runtime(question, registry, runtime_store, limit=5)
 build_vector_index(registry, embedding_provider)
 discover_datasets_hybrid(question, registry, vector_index, limit=5)
+discover_datasets_hybrid_with_runtime(...)
 validate_registry(registry)
 ```
 
@@ -128,28 +132,39 @@ src/ai_data_platform/
   validation/     structural and referential validation
   embeddings/     provider contract, semantic documents, and vector index
   discovery/      deterministic/hybrid retrieval, scoring, and ambiguity behavior
-  policy/         centralized ranking policy
+  runtime/        typed observations, SQLite latest state, and DuckDB history
+  context/        semantic + runtime context assembly
+  http/           thin FastAPI adapter
+  policy/         centralized semantic, hybrid, and runtime ranking policy
   api.py          stable Python capability layer
 
 evaluation/       versioned retrieval relevance cases
 tests/            acceptance and unit tests
 ```
 
-## Run Milestone 2
+## Run Milestone 3
 
 ```bash
-python -m pip install -e .
+python -m pip install -e ".[test]"
 python -m ai_data_platform validate
 python -m ai_data_platform discover "What was net revenue last quarter?"
 python -m ai_data_platform discover "What was net revenue last quarter?" --mode hybrid
 python -m ai_data_platform evaluate
 python -m unittest discover -s tests -v
+python -m ai_data_platform serve --state-dir var
 ```
 
-The evaluation command reports Recall@K, mean reciprocal rank, and discovery-status
-accuracy for both the deterministic baseline and hybrid retrieval. The checked-in corpus
-is deliberately small; expanding it with domain-owner judgments is part of making the
-comparison representative rather than optimizing for a demo.
+The service publishes OpenAPI documentation at `http://127.0.0.1:8000/docs`. Its main
+endpoints are:
+
+- `POST /v1/runtime/observations` — record current state in SQLite and history in DuckDB
+- `POST /v1/discovery` — deterministic or hybrid discovery with explained runtime reranking
+- `GET /v1/datasets/{dataset_id}/context` — combined contract, semantics, runtime state,
+  and row-count trend
+- `GET /v1/datasets/{dataset_id}/runtime/history` — recent observations
+
+See [Milestone 3 runtime context design](docs/milestone-3-runtime-context.md) for the
+storage boundary, ranking policy, API examples, and configuration.
 
 ## Where this is going
 

@@ -1,4 +1,4 @@
-"""Centralized, deterministic business-ranking rules for Milestone 1."""
+"""Centralized, deterministic business and runtime ranking rules."""
 
 RANKING_WEIGHTS = {
     "keyword_match_per_term": 2,
@@ -25,4 +25,14 @@ HYBRID_RANKING_WEIGHTS = {
     "rrf_scale": 1_000,
     "deterministic_rrf_weight": 2,
     "vector_rrf_weight": 1,
+}
+
+
+RUNTIME_RANKING_WEIGHTS = {
+    "freshness": {"fresh": 8, "stale": -12, "unknown": 0},
+    "quality": {"passing": 10, "warning": -5, "failing": -20, "unknown": 0},
+    "health": {"healthy": 8, "degraded": -8, "failed": -20, "unknown": 0},
+    "usage_low": 1,
+    "usage_medium": 3,
+    "usage_high": 5,
 }

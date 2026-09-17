@@ -4,14 +4,20 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ai-native-data-platform"
-version = "0.2.0"
-description = "Vendor-neutral semantic registry with deterministic and hybrid dataset discovery."
+version = "0.3.0"
+description = "Vendor-neutral semantic context platform with hybrid retrieval and runtime metadata."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+  "duckdb>=1.1,<2",
+  "fastapi>=0.115,<1",
   "pydantic>=2.7,<3",
   "PyYAML>=6.0,<7",
+  "uvicorn>=0.30,<1",
 ]
+
+[project.optional-dependencies]
+test = ["httpx>=0.27,<1"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ai_data_platform"]
