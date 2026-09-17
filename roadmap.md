@@ -186,6 +186,25 @@ Use the platform to help agents build and operate data systems.
 
 Start with capabilities before multiple specialized agents.
 
+Status: local DEV reference implementation complete; environment-specific adapters,
+Git workflow execution, and specialized agent orchestration remain future work.
+
+Reference implementation:
+- deterministic ingestion-pattern recommendation
+- approval-aware pipeline planning
+- proposed dataset-contract validation against canonical semantics
+- repository-scoped, fixed-profile DEV validation
+- bounded DuckDB reconciliation with safe identifiers
+- content-hashed DEV deployment manifests after validation
+- transactional DuckDB replacement with a retained backup and deterministic rollback
+- append-only local audit records for state-changing actions
+
+The local runner is deliberately not a universal executor: callers cannot pass shell
+commands, database URLs, external filesystem paths, or arbitrary SQL. QA and production
+writes remain unavailable even if a caller supplies an approval flag; those environments
+need an explicit adapter with their own authorization, change-control, and rollback
+contracts.
+
 Potential high-level tools:
 - `recommend_ingestion_pattern()`
 - `generate_pipeline_plan()`

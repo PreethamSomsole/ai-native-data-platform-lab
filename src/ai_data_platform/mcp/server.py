@@ -64,7 +64,7 @@ def create_mcp_server(
             "Governed, read-only access to semantic metadata, dataset discovery, "
             "and runtime context."
         ),
-        version="0.5.0",
+        version="0.6.0",
         lifespan=lifespan,
     )
 

@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ai-native-data-platform"
-version = "0.5.0"
-description = "Vendor-neutral semantic context platform with governed agent tools."
+version = "0.6.0"
+description = "Vendor-neutral semantic context platform with governed agent and engineering tools."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

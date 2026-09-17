@@ -15,6 +15,7 @@ from ai_data_platform.api import (
     resolve_metric,
     validate_registry,
 )
+from ai_data_platform.engineering import EngineeringService, EngineeringToolError
 from ai_data_platform.reasoning import (
     DatasetReasoningProvider,
     DatasetSelectionResult,
@@ -32,6 +33,8 @@ __all__ = [
     "AgentToolService",
     "DatasetReasoningProvider",
     "DatasetSelectionResult",
+    "EngineeringService",
+    "EngineeringToolError",
     "OpenAIResponsesReasoningProvider",
     "ReasoningPolicyError",
     "ReasoningProviderError",
