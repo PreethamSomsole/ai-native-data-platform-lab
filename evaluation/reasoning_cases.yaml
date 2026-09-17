@@ -1,0 +1,22 @@
+- id: ambiguous_net_revenue
+  question: What was net revenue last quarter?
+  expected_status: CLARIFICATION_REQUIRED
+
+- id: finance_recognized_revenue
+  question: What was Finance recognized net revenue last quarter?
+  expected_status: RESOLVED
+  expected_dataset_id: gold.finance_revenue
+
+- id: operational_order_revenue
+  question: Show operational order revenue by region.
+  expected_status: RESOLVED
+  expected_dataset_id: gold.order_revenue
+
+- id: monthly_sales_bookings
+  question: Show monthly sales bookings by product.
+  expected_status: RESOLVED
+  expected_dataset_id: gold.monthly_sales
+
+- id: unrelated_question
+  question: Which office has the best parking availability?
+  expected_status: NO_MATCH
