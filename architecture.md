@@ -193,6 +193,42 @@ logic.
 This keeps interfaces replaceable and avoids coupling the domain model to a specific
 agent framework or vendor.
 
+### 4.1 Governed agent tool boundary
+
+Milestone 5 adds a protocol-independent `AgentToolService` between the platform
+capabilities and agent protocols. This keeps MCP replaceable in the same way the REST and
+CLI adapters are replaceable.
+
+```text
+MCP client
+   ↓ validated tool schema
+MCP adapter
+   ↓ stable typed call
+AgentToolService
+   ↓
+capability / ContextService layers
+   ↓
+semantic registry + runtime stores
+```
+
+The first tool set is deliberately read-only. It supports bounded dataset discovery,
+canonical definition lookup, assembled dataset context, and validation of the configured
+registry. The MCP tool annotations declare calls read-only, non-destructive, idempotent,
+and closed-world.
+
+Security and governance depend on more than those hints, so the implementation also:
+
+- keeps registry and runtime-store paths in server configuration rather than tool inputs
+- caps discovery at five candidates and context history at 1,000 observations
+- preserves `NO_MATCH` and `CLARIFICATION_REQUIRED` as deterministic outcomes
+- translates known capability failures into stable agent-facing errors
+- exposes no arbitrary file access, SQL execution, metadata mutation, or deployment action
+- performs no hidden LLM call
+
+Lineage is not exposed until lineage becomes a first-class, validated registry contract.
+Returning inferred lineage from dataset names or prose would create a misleading source of
+authority.
+
 ## 5. AI-native data engineering
 
 The second plane treats AI agents as a new class of engineering actor alongside humans,

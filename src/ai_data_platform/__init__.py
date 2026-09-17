@@ -1,5 +1,6 @@
-"""Vendor-neutral semantic context platform with governed dataset reasoning."""
+"""Vendor-neutral semantic context platform with governed agent tools."""
 
+from ai_data_platform.agent_tools import AgentToolError, AgentToolService
 from ai_data_platform.api import (
     assess_ambiguity,
     build_vector_index,
@@ -27,6 +28,8 @@ from ai_data_platform.reasoning import (
 from ai_data_platform.registry.loader import load_registry
 
 __all__ = [
+    "AgentToolError",
+    "AgentToolService",
     "DatasetReasoningProvider",
     "DatasetSelectionResult",
     "OpenAIResponsesReasoningProvider",

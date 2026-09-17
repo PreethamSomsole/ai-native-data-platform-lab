@@ -47,6 +47,12 @@ def main() -> int:
     serve_parser.add_argument(
         "--state-dir", type=Path, default=Path("var"), help="SQLite and DuckDB directory."
     )
+    mcp_parser = subparsers.add_parser(
+        "mcp", help="Run the read-only Model Context Protocol server over stdio."
+    )
+    mcp_parser.add_argument(
+        "--state-dir", type=Path, default=Path("var"), help="SQLite and DuckDB directory."
+    )
     subparsers.add_parser("validate", help="Validate registry metadata and references.")
     args = parser.parse_args()
 
@@ -86,6 +92,12 @@ def main() -> int:
             create_reasoning_service_from_env(context_service),
         )
         uvicorn.run(app, host=args.host, port=args.port)
+        return 0
+    if args.command == "mcp":
+        from ai_data_platform.mcp import create_mcp_server_from_paths
+
+        server = create_mcp_server_from_paths(args.registry, args.state_dir)
+        server.run(transport="stdio")
         return 0
     if args.mode == "hybrid":
         index = build_vector_index(registry, HashingEmbeddingProvider())
