@@ -6,6 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import duckdb
+
 from ai_data_platform import load_registry
 from ai_data_platform.engineering import (
     ApprovalRequirement,
@@ -87,10 +89,14 @@ class EngineeringServiceTests(unittest.TestCase):
     def test_safe_replace_is_atomic_and_has_recoverable_rollback(self) -> None:
         connection = self.service._connect()
         try:
-            connection.execute("CREATE TABLE gold_table (id INTEGER)")
-            connection.execute("CREATE TABLE replacement_table (id INTEGER)")
-            connection.execute("INSERT INTO gold_table VALUES (1)")
-            connection.execute("INSERT INTO replacement_table VALUES (2), (3)")
+            connection.execute(
+                "CREATE TABLE gold_table (id INTEGER PRIMARY KEY, amount INTEGER DEFAULT 10, "
+                "CHECK (amount >= 0))"
+            )
+            connection.execute("CREATE INDEX gold_table_amount_index ON gold_table(amount)")
+            connection.execute("CREATE TABLE replacement_table (id INTEGER, amount INTEGER)")
+            connection.execute("INSERT INTO gold_table (id) VALUES (1)")
+            connection.execute("INSERT INTO replacement_table VALUES (2, 20), (3, 30)")
         finally:
             connection.close()
 
@@ -109,6 +115,14 @@ class EngineeringServiceTests(unittest.TestCase):
         try:
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM gold_table").fetchone()[0], 1)
             self.assertEqual(connection.execute("SELECT id FROM gold_table").fetchone()[0], 1)
+            with self.assertRaises(duckdb.ConstraintException):
+                connection.execute("INSERT INTO gold_table VALUES (1, 10)")
+            with self.assertRaises(duckdb.ConstraintException):
+                connection.execute("INSERT INTO gold_table VALUES (2, -1)")
+            index_count = connection.execute(
+                "SELECT COUNT(*) FROM duckdb_indexes() WHERE table_name = 'gold_table'"
+            ).fetchone()[0]
+            self.assertEqual(index_count, 1)
         finally:
             connection.close()
 
@@ -123,6 +137,26 @@ class EngineeringServiceTests(unittest.TestCase):
         )
         self.assertEqual(result.status, ToolStatus.APPROVAL_REQUIRED)
         self.assertEqual(result.approval_requirement, ApprovalRequirement.REQUIRED)
+
+    def test_registry_validation_uses_the_service_registry(self) -> None:
+        custom_registry = self.service.registry.model_copy(
+            update={
+                "datasets": {
+                    **self.service.registry.datasets,
+                    "gold.invalid": self.service.registry.datasets[
+                        "gold.finance_revenue"
+                    ].model_copy(update={"id": "gold.invalid", "metric_ids": ["metric.unknown"]}),
+                }
+            }
+        )
+        service = EngineeringService(
+            custom_registry,
+            PROJECT_ROOT,
+            Path(self.temporary_directory.name) / "custom-registry-state",
+        )
+        result = service.run_dev_validation("registry")
+        self.assertEqual(result.status, ToolStatus.FAILED)
+        self.assertIn("gold.invalid references unknown metric 'metric.unknown'", result.output)
 
     def test_server_configuration_can_disable_development_writes(self) -> None:
         disabled_service = EngineeringService(
@@ -139,6 +173,14 @@ class EngineeringServiceTests(unittest.TestCase):
             )
         )
         self.assertEqual(result.status, ToolStatus.APPROVAL_REQUIRED)
+        restore = disabled_service.restore_table_from_backup(
+            RestoreTableRequest(
+                target_table="gold_table",
+                backup_table="gold_table__backup__placeholder",
+                approval_granted=True,
+            )
+        )
+        self.assertEqual(restore.status, ToolStatus.APPROVAL_REQUIRED)
 
     def test_registry_validation_and_repository_scoped_deployment(self) -> None:
         validation = self.service.run_dev_validation("registry")

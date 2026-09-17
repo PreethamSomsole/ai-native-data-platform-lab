@@ -114,6 +114,65 @@ class EngineeringService:
     def _connect(self) -> duckdb.DuckDBPyConnection:
         return duckdb.connect(str(self.database_path))
 
+    def _copy_table_with_schema(
+        self,
+        connection: duckdb.DuckDBPyConnection,
+        source_name: str,
+        destination_name: str,
+    ) -> None:
+        """Copy a DuckDB table's definition, data, and indexes for rollback safety."""
+        source = self._quote_identifier(source_name)
+        destination = self._quote_identifier(destination_name)
+        definition_row = connection.execute(
+            "SELECT sql FROM duckdb_tables() WHERE database_name = current_database() "
+            "AND schema_name = 'main' AND table_name = ?",
+            [source_name],
+        ).fetchone()
+        if definition_row is None or not definition_row[0]:
+            raise EngineeringToolError(
+                "NOT_FOUND", f"table definition for '{source_name}' was not found"
+            )
+        create_table_sql = re.sub(
+            r'^(CREATE\s+TABLE\s+)(?:"(?:[^"]|"")*"|[A-Za-z_][A-Za-z0-9_]*)',
+            lambda match: f"{match.group(1)}{destination}",
+            definition_row[0],
+            count=1,
+        )
+        if create_table_sql == definition_row[0]:
+            raise EngineeringToolError(
+                "CAPABILITY_UNAVAILABLE",
+                f"could not safely clone the definition for table '{source_name}'",
+            )
+        connection.execute(create_table_sql)
+        connection.execute(f"INSERT INTO {destination} SELECT * FROM {source}")
+        indexes = connection.execute(
+            "SELECT sql FROM duckdb_indexes() WHERE database_name = current_database() "
+            "AND schema_name = 'main' AND table_name = ? ORDER BY index_name",
+            [source_name],
+        ).fetchall()
+        for (index_sql,) in indexes:
+            new_index_name = self._backup_name("idx", "copy")
+            rewritten_index_sql = re.sub(
+                r'^(CREATE\s+(?:UNIQUE\s+)?INDEX\s+)(?:"(?:[^"]|"")*"|[A-Za-z_][A-Za-z0-9_]*)',
+                lambda match, index_name=new_index_name: (
+                    f"{match.group(1)}{self._quote_identifier(index_name)}"
+                ),
+                index_sql,
+                count=1,
+            )
+            rewritten_index_sql = re.sub(
+                r'(\s+ON\s+)(?:"(?:[^"]|"")*"|[A-Za-z_][A-Za-z0-9_]*)',
+                lambda match: f"{match.group(1)}{destination}",
+                rewritten_index_sql,
+                count=1,
+            )
+            if rewritten_index_sql == index_sql:
+                raise EngineeringToolError(
+                    "CAPABILITY_UNAVAILABLE",
+                    f"could not safely clone an index for table '{source_name}'",
+                )
+            connection.execute(rewritten_index_sql)
+
     def _audit(self, action: str, **details: object) -> None:
         entry = {"observed_at": datetime.now(tz=UTC).isoformat(), "action": action, **details}
         with self.audit_path.open("a", encoding="utf-8") as audit_file:
@@ -209,8 +268,27 @@ class EngineeringService:
         )
 
     def run_dev_validation(self, profile: str = "unit") -> DevValidationResult:
+        if profile == "registry":
+            command = ["in-process", "validate_registry", "configured-service-registry"]
+            try:
+                validate_registry(self.registry)
+            except RegistryValidationError as error:
+                output = "\n".join(error.messages)
+                status = ToolStatus.FAILED
+                exit_code = 1
+            else:
+                output = "Configured service registry is valid."
+                status = ToolStatus.SUCCEEDED
+                exit_code = 0
+            self._audit("run_dev_validation", profile=profile, status=status.value)
+            return DevValidationResult(
+                profile=profile,
+                status=status,
+                command=command,
+                exit_code=exit_code,
+                output=output,
+            )
         commands = {
-            "registry": [sys.executable, "-m", "ai_data_platform", "validate"],
             "unit": [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"],
         }
         if profile not in commands:
@@ -305,7 +383,6 @@ class EngineeringService:
             )
         connection = self._connect()
         backup_name = self._backup_name(request.target_table, "backup")
-        backup = self._quote_identifier(backup_name)
         try:
             if not self._table_exists(connection, request.target_table):
                 raise EngineeringToolError(
@@ -319,7 +396,7 @@ class EngineeringService:
                 0
             ]
             connection.execute("BEGIN TRANSACTION")
-            connection.execute(f"CREATE TABLE {backup} AS SELECT * FROM {target}")
+            self._copy_table_with_schema(connection, request.target_table, backup_name)
             connection.execute(f"DROP TABLE {target}")
             connection.execute(f"ALTER TABLE {replacement} RENAME TO {target}")
             connection.execute("COMMIT")
@@ -363,6 +440,14 @@ class EngineeringService:
                     f"{request.environment.value} execution requires a future environment adapter"
                 ),
             )
+        if not self.allow_development_writes:
+            return SafeReplaceResult(
+                status=ToolStatus.APPROVAL_REQUIRED,
+                target_table=request.target_table,
+                replacement_table=request.backup_table,
+                approval_requirement=ApprovalRequirement.REQUIRED,
+                message="development writes are disabled by server configuration",
+            )
         if requirement is ApprovalRequirement.REQUIRED and not request.approval_granted:
             return SafeReplaceResult(
                 status=ToolStatus.APPROVAL_REQUIRED,
@@ -373,7 +458,6 @@ class EngineeringService:
             )
         connection = self._connect()
         prior_name = self._backup_name(request.target_table, "before_restore")
-        prior = self._quote_identifier(prior_name)
         try:
             if not self._table_exists(connection, request.target_table):
                 raise EngineeringToolError(
@@ -385,9 +469,10 @@ class EngineeringService:
                 )
             restored_rows = connection.execute(f"SELECT COUNT(*) FROM {backup}").fetchone()[0]
             connection.execute("BEGIN TRANSACTION")
-            connection.execute(f"CREATE TABLE {prior} AS SELECT * FROM {target}")
+            self._copy_table_with_schema(connection, request.target_table, prior_name)
             connection.execute(f"DROP TABLE {target}")
-            connection.execute(f"ALTER TABLE {backup} RENAME TO {target}")
+            self._copy_table_with_schema(connection, request.backup_table, request.target_table)
+            connection.execute(f"DROP TABLE {backup}")
             connection.execute("COMMIT")
         except Exception:
             try:
