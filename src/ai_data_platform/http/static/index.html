@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="A governed semantic discovery demo for the AI-Native Data Platform."
+    />
+    <title>Data Context Explorer</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">◈</div>
+          <div>
+            <p class="eyebrow">AI-NATIVE DATA PLATFORM</p>
+            <h1>Data Context Explorer</h1>
+          </div>
+        </div>
+        <div class="service-status" id="service-status" aria-live="polite">
+          <span class="status-dot"></span>
+          Checking service
+        </div>
+      </header>
+
+      <section class="hero" aria-labelledby="explore-heading">
+        <div>
+          <p class="eyebrow">Governed semantic discovery</p>
+          <h2 id="explore-heading">Ask a business question. Get an answer you can trust.</h2>
+          <p class="lede">
+            The platform returns certified data context, shows the evidence behind ranking,
+            and asks for clarification when definitions are not interchangeable.
+          </p>
+        </div>
+        <div class="guardrail-callout">
+          <span class="callout-icon" aria-hidden="true">✓</span>
+          <div>
+            <strong>Guardrail active</strong>
+            <p>AI reasons; deterministic policy controls selection.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="explorer" aria-label="Dataset discovery">
+        <form id="discovery-form" class="question-form">
+          <label for="question">Business question</label>
+          <div class="question-row">
+            <input
+              id="question"
+              name="question"
+              value="What was net revenue last quarter?"
+              autocomplete="off"
+              required
+            />
+            <select id="mode" name="mode" aria-label="Discovery mode">
+              <option value="hybrid" selected>Hybrid discovery</option>
+              <option value="deterministic">Deterministic discovery</option>
+            </select>
+            <button type="submit" id="discover-button">Discover data</button>
+          </div>
+          <div class="example-row" aria-label="Example questions">
+            <span>Try:</span>
+            <button type="button" class="example" data-question="What was net revenue last quarter?">
+              Ambiguous revenue
+            </button>
+            <button type="button" class="example" data-question="What was Finance recognized net revenue last quarter?">
+              Finance revenue
+            </button>
+            <button type="button" class="example" data-question="What was completed order revenue last quarter?">
+              Operations revenue
+            </button>
+          </div>
+        </form>
+
+        <div class="demo-actions">
+          <div>
+            <strong>Demo runtime signals</strong>
+            <p>Load fresh, passing pipeline data for the finance revenue dataset.</p>
+          </div>
+          <button type="button" class="secondary-button" id="load-runtime-button">
+            Load runtime context
+          </button>
+        </div>
+      </section>
+
+      <p class="feedback" id="feedback" role="status" aria-live="polite"></p>
+
+      <section class="results-layout" aria-label="Discovery results">
+        <section class="result-panel" aria-labelledby="result-heading">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Discovery result</p>
+              <h2 id="result-heading">Awaiting a question</h2>
+            </div>
+            <span class="status-badge neutral" id="status-badge">READY</span>
+          </div>
+          <div id="result-summary" class="result-summary">
+            Ask a question to retrieve governed dataset candidates.
+          </div>
+          <div class="candidate-list" id="candidate-list" aria-live="polite"></div>
+        </section>
+
+        <aside class="detail-panel" aria-labelledby="detail-heading">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Dataset context</p>
+              <h2 id="detail-heading">Select a candidate</h2>
+            </div>
+          </div>
+          <div class="empty-detail" id="detail-content">
+            Ranking evidence, semantic definitions, and operational trust signals will appear here.
+          </div>
+        </aside>
+      </section>
+
+      <footer>
+        Semantic registry → governed retrieval → runtime context → agent-ready capability
+      </footer>
+    </main>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

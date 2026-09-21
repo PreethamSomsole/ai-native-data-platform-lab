@@ -58,6 +58,10 @@ class ContextApiTests(unittest.IsolatedAsyncioTestCase):
         }
 
     async def test_runtime_ingestion_context_discovery_and_history_flow(self) -> None:
+        demo = await self.client.get("/")
+        self.assertEqual(demo.status_code, 200)
+        self.assertIn("Data Context Explorer", demo.text)
+
         self.assertEqual((await self.client.get("/health")).json(), {"status": "ok"})
 
         created = await self.client.post("/v1/runtime/observations", json=self._payload())

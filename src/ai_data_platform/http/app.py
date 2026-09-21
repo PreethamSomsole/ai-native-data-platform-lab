@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, status
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ai_data_platform.api import build_vector_index
@@ -72,6 +74,13 @@ def create_app(
         title="AI-Native Data Platform Context Service",
         version="0.4.0",
     )
+    static_directory = Path(__file__).with_name("static")
+    app.mount("/static", StaticFiles(directory=static_directory), name="static")
+
+    @app.get("/", include_in_schema=False)
+    def demo_ui() -> FileResponse:
+        """Serve the self-contained demo surface for the context capability."""
+        return FileResponse(static_directory / "index.html")
 
     @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:
