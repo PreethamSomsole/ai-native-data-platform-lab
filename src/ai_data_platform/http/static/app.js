@@ -1,19 +1,18 @@
-const form = document.querySelector("#discovery-form");
+const chatForm = document.querySelector("#chat-form");
 const questionInput = document.querySelector("#question");
-const modeInput = document.querySelector("#mode");
-const discoverButton = document.querySelector("#discover-button");
-const runtimeButton = document.querySelector("#load-runtime-button");
-const feedback = document.querySelector("#feedback");
-const statusBadge = document.querySelector("#status-badge");
-const resultHeading = document.querySelector("#result-heading");
-const resultSummary = document.querySelector("#result-summary");
+const sendButton = document.querySelector("#send-button");
+const chatHistory = document.querySelector("#chat-history");
 const candidateList = document.querySelector("#candidate-list");
 const detailHeading = document.querySelector("#detail-heading");
 const detailContent = document.querySelector("#detail-content");
 const serviceStatus = document.querySelector("#service-status");
+const statusBadge = document.querySelector("#status-badge");
+const runtimeButton = document.querySelector("#load-runtime-button");
+const feedback = document.querySelector("#feedback");
 
 let selectedDatasetId = null;
-let lastDiscovery = null;
+let currentCandidates = [];
+let lastDiscoveryMode = "hybrid";
 
 const escapeHtml = (value) => String(value ?? "")
   .replaceAll("&", "&amp;")
@@ -32,6 +31,12 @@ function setFeedback(message, error = false) {
   feedback.classList.toggle("error", error);
 }
 
+function setStatus(status) {
+  const normalized = String(status || "READY").toLowerCase();
+  statusBadge.textContent = String(status || "READY").replaceAll("_", " ");
+  statusBadge.className = `status-badge ${normalized}`;
+}
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
@@ -44,54 +49,38 @@ async function api(path, options = {}) {
   return response.json();
 }
 
-function setStatus(status) {
-  const normalized = String(status || "READY").toLowerCase();
-  statusBadge.textContent = String(status || "READY").replaceAll("_", " ");
-  statusBadge.className = `status-badge ${normalized}`;
-}
-
-function renderSummary(discovery) {
-  if (discovery.status === "CLARIFICATION_REQUIRED") {
-    const metrics = discovery.ambiguity?.conflicting_metrics || [];
-    const definitions = metrics.map((metric) => `<strong>${escapeHtml(metric.name)}</strong> (${escapeHtml(metric.domain)})`).join(" and ");
-    resultSummary.className = "result-summary warning";
-    resultSummary.innerHTML = `Clarification is required before selecting a dataset. ${definitions || "Multiple certified definitions are relevant"} are intentionally not interchangeable.`;
-    return;
-  }
-  if (discovery.status === "RESOLVED") {
-    resultSummary.className = "result-summary";
-    const metric = discovery.resolved_metric;
-    resultSummary.innerHTML = metric
-      ? `Resolved to <strong>${escapeHtml(metric.name)}</strong>. The evidence below makes the selection inspectable.`
-      : "A governed dataset match was resolved.";
-    return;
-  }
-  resultSummary.className = "result-summary warning";
-  resultSummary.textContent = "No governed dataset match was found. Try a more specific business term or metric definition.";
+function addMessage(role, text) {
+  const msgDiv = document.createElement("div");
+  msgDiv.className = `chat-message ${role}`;
+  msgDiv.innerHTML = `<div class="message-content">${escapeHtml(text)}</div>`;
+  chatHistory.appendChild(msgDiv);
+  chatHistory.scrollTop = chatHistory.scrollHeight;
 }
 
 function renderCandidates(candidates) {
   candidateList.innerHTML = "";
-  if (!candidates.length) return;
-  for (const item of candidates) {
-    const { candidate, dataset, runtime } = item;
-    const button = document.createElement("button");
-    button.type = "button";
+  if (!candidates || !candidates.length) return;
+  for (const candidate of candidates) {
+    // Determine dataset from either direct object or nested discovery candidate
+    const dataset = candidate.dataset || candidate; 
+    const score = candidate.score || (candidate.candidate && candidate.candidate.score) || 0;
+    const reasons = candidate.reasons || (candidate.candidate && candidate.candidate.reasons) || [];
+    
+    const button = document.createElement("div");
     button.className = `candidate-card${selectedDatasetId === dataset.id ? " selected" : ""}`;
     button.dataset.datasetId = dataset.id;
-    const signals = candidate.reasons.map((reason) => `<span class="signal-pill">${escapeHtml(titleCase(reason.signal))}</span>`).join("");
-    const runtimeText = runtime
-      ? `<span class="signal-pill">${escapeHtml(titleCase(runtime.operational_health))} runtime</span>`
-      : "";
+    
+    const signals = reasons.map((reason) => `<span class="signal-pill">${escapeHtml(titleCase(reason.signal))}</span>`).join("");
+    
     button.innerHTML = `
       <span class="candidate-title">
         <span><strong class="dataset-name">${escapeHtml(dataset.name)}</strong><span class="dataset-id">${escapeHtml(dataset.id)}</span></span>
-        <span class="score">${escapeHtml(candidate.score)} pts</span>
+        ${score ? `<span class="score">${escapeHtml(score)} pts</span>` : ''}
       </span>
       <span class="candidate-description">${escapeHtml(dataset.description)}</span>
-      <span class="signal-pills">${signals}${runtimeText}</span>
+      <span class="signal-pills">${signals}</span>
     `;
-    button.addEventListener("click", () => selectDataset(dataset.id));
+    button.addEventListener("click", () => selectDataset(dataset.id, candidates));
     candidateList.append(button);
   }
 }
@@ -105,7 +94,7 @@ function statusClass(value) {
 
 function runtimeMarkup(runtime) {
   if (!runtime) {
-    return `<div class="detail-section"><h3>Operational trust</h3><p>No runtime observation is loaded for this dataset yet. Use <strong>Load runtime context</strong> to demonstrate freshness, quality, health, and usage signals.</p></div>`;
+    return `<div class="detail-section"><h3>Operational trust</h3><p>No runtime observation is loaded for this dataset yet.</p></div>`;
   }
   return `
     <div class="detail-section">
@@ -121,13 +110,20 @@ function runtimeMarkup(runtime) {
     </div>`;
 }
 
-function renderDetail(context) {
+function renderDetail(context, candidateInfo) {
   const { dataset, metrics, concepts, entities, runtime } = context;
   detailHeading.textContent = dataset.name;
   const metricItems = metrics.map((metric) => `<li>${escapeHtml(metric.name)}</li>`).join("") || "<li>No linked metrics</li>";
   const conceptItems = [...concepts, ...entities].map((item) => `<li>${escapeHtml(item.name)}</li>`).join("") || "<li>No linked concepts</li>";
-  const candidate = lastDiscovery?.candidates.find((item) => item.dataset.id === dataset.id)?.candidate;
-  const reasons = candidate?.reasons.map((reason) => `<li><strong>${escapeHtml(titleCase(reason.signal))}:</strong> ${escapeHtml(reason.detail)} <span class="good">+${escapeHtml(reason.points)}</span></li>`).join("") || "<li>Select a result from the latest discovery to view ranking evidence.</li>";
+  
+  let reasons = "<li>No ranking evidence available.</li>";
+  if (candidateInfo) {
+      const evidenceList = candidateInfo.reasons || (candidateInfo.candidate && candidateInfo.candidate.reasons) || [];
+      if (evidenceList.length > 0) {
+          reasons = evidenceList.map((reason) => `<li><strong>${escapeHtml(titleCase(reason.signal))}:</strong> ${escapeHtml(reason.detail)} <span class="good">+${escapeHtml(reason.points)}</span></li>`).join("");
+      }
+  }
+
   detailContent.className = "";
   detailContent.innerHTML = `
     <div class="detail-section"><h3>Business definition</h3><p>${escapeHtml(dataset.description)}</p></div>
@@ -139,15 +135,16 @@ function renderDetail(context) {
   `;
 }
 
-async function selectDataset(datasetId) {
+async function selectDataset(datasetId, candidates) {
   selectedDatasetId = datasetId;
-  renderCandidates(lastDiscovery?.candidates || []);
+  renderCandidates(candidates);
   detailHeading.textContent = "Loading context…";
   detailContent.className = "empty-detail";
   detailContent.textContent = "Retrieving semantic and runtime context.";
   try {
     const context = await api(`/v1/datasets/${encodeURIComponent(datasetId)}/context`);
-    renderDetail(context);
+    let cInfo = candidates.find(c => (c.dataset && c.dataset.id === datasetId) || (c.id === datasetId));
+    renderDetail(context, cInfo);
   } catch (error) {
     detailHeading.textContent = "Context unavailable";
     detailContent.textContent = error.message;
@@ -155,32 +152,100 @@ async function selectDataset(datasetId) {
   }
 }
 
-async function discover() {
+async function askAgent() {
   const question = questionInput.value.trim();
   if (!question) return;
-  discoverButton.disabled = true;
-  discoverButton.textContent = "Discovering…";
-  setFeedback("Running governed discovery…");
+  
+  questionInput.value = "";
+  sendButton.disabled = true;
+  addMessage("user", question);
+  
+  // Clear evidence pane
+  candidateList.innerHTML = "";
+  detailHeading.textContent = "Discovering...";
+  detailContent.innerHTML = "Consulting semantic rules and metadata...";
+  setStatus("WORKING");
+
   try {
-    const data = await api("/v1/discovery", {
-      method: "POST",
-      body: JSON.stringify({ question, mode: modeInput.value, limit: 5 }),
-    });
-    lastDiscovery = data;
-    selectedDatasetId = null;
-    setStatus(data.discovery.status);
-    resultHeading.textContent = data.discovery.status === "CLARIFICATION_REQUIRED"
-      ? "Clarification required"
-      : data.discovery.status === "RESOLVED" ? "Dataset resolved" : "No governed match";
-    renderSummary(data.discovery);
-    renderCandidates(data.candidates);
-    setFeedback(`${data.candidates.length} governed candidate${data.candidates.length === 1 ? "" : "s"} returned.`);
-    if (data.candidates.length === 1) await selectDataset(data.candidates[0].dataset.id);
+    // Try reasoning endpoint first
+    let isReasoning = true;
+    let data;
+    try {
+        data = await api("/v1/reasoning/dataset-selection", {
+            method: "POST",
+            body: JSON.stringify({ question, mode: lastDiscoveryMode, limit: 5 }),
+        });
+    } catch(err) {
+        if (err.message.includes("503") || err.message.includes("reasoning provider is not configured")) {
+            isReasoning = false;
+        } else {
+            throw err;
+        }
+    }
+
+    if (isReasoning && data) {
+        setStatus(data.status);
+        let explanation = data.explanation;
+        if (data.status === "CLARIFICATION_REQUIRED" && data.clarification_question) {
+            explanation += "\n\n" + data.clarification_question;
+        }
+        addMessage("agent", explanation);
+        
+        // We need the full contexts to show the right pane properly
+        if (data.candidate_ids && data.candidate_ids.length > 0) {
+            detailHeading.textContent = "Fetching context...";
+            
+            // Fetch discovery payload just to get the rich candidate objects for the UI
+            const discData = await api("/v1/discovery", {
+                method: "POST",
+                body: JSON.stringify({ question, mode: lastDiscoveryMode, limit: 5 }),
+            });
+            currentCandidates = discData.candidates;
+            
+            if (data.selected_dataset_id) {
+                await selectDataset(data.selected_dataset_id, currentCandidates);
+            } else if (currentCandidates.length > 0) {
+                await selectDataset(currentCandidates[0].dataset.id, currentCandidates);
+            }
+        } else {
+            detailHeading.textContent = "No Candidates";
+            detailContent.innerHTML = "The deterministic engine did not return any valid datasets.";
+        }
+    } else {
+        // Fallback to Discovery
+        const discData = await api("/v1/discovery", {
+            method: "POST",
+            body: JSON.stringify({ question, mode: lastDiscoveryMode, limit: 5 }),
+        });
+        
+        setStatus(discData.discovery.status);
+        currentCandidates = discData.candidates;
+        
+        // Mock Agent Message
+        if (discData.discovery.status === "CLARIFICATION_REQUIRED") {
+            const metrics = discData.discovery.ambiguity?.conflicting_metrics || [];
+            const definitions = metrics.map((metric) => `${metric.name} (${metric.domain})`).join(" and ");
+            addMessage("agent", `I found multiple certified definitions that could match. Clarification is required because ${definitions || "these"} are intentionally not interchangeable.`);
+        } else if (discData.discovery.status === "RESOLVED") {
+            addMessage("agent", `I resolved your request to ${discData.discovery.resolved_metric?.name || "a governed dataset"}. I've loaded the context and evidence in the right panel.`);
+        } else {
+            addMessage("agent", "I could not find a governed match for that question. Please try a more specific business term.");
+        }
+        
+        if (currentCandidates.length > 0) {
+            await selectDataset(currentCandidates[0].dataset.id, currentCandidates);
+        } else {
+            detailHeading.textContent = "No Match";
+            detailContent.innerHTML = "";
+        }
+    }
+
   } catch (error) {
-    setFeedback(error.message, true);
+    addMessage("agent", `Error: ${error.message}`);
+    setStatus("ERROR");
   } finally {
-    discoverButton.disabled = false;
-    discoverButton.textContent = "Discover data";
+    sendButton.disabled = false;
+    questionInput.focus();
   }
 }
 
@@ -206,7 +271,7 @@ async function loadRuntime() {
         operational_health: "healthy",
       }),
     });
-    setFeedback("Runtime context loaded. Run Finance revenue discovery to see transparent reranking.");
+    setFeedback("Runtime context loaded.");
     runtimeButton.textContent = "Runtime context loaded";
   } catch (error) {
     setFeedback(error.message, true);
@@ -227,12 +292,11 @@ async function checkHealth() {
   }
 }
 
-form.addEventListener("submit", (event) => { event.preventDefault(); discover(); });
+chatForm.addEventListener("submit", (event) => { event.preventDefault(); askAgent(); });
 runtimeButton.addEventListener("click", loadRuntime);
 document.querySelectorAll(".example").forEach((button) => button.addEventListener("click", () => {
   questionInput.value = button.dataset.question;
-  questionInput.focus();
-  discover();
+  askAgent();
 }));
 
 checkHealth();

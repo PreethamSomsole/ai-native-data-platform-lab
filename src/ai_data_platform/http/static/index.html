@@ -17,7 +17,7 @@
           <div class="brand-mark" aria-hidden="true">◈</div>
           <div>
             <p class="eyebrow">AI-NATIVE DATA PLATFORM</p>
-            <h1>Data Context Explorer</h1>
+            <h1>Data Context Co-Pilot</h1>
           </div>
         </div>
         <div class="service-status" id="service-status" aria-live="polite">
@@ -26,90 +26,60 @@
         </div>
       </header>
 
-      <section class="hero" aria-labelledby="explore-heading">
+      <div class="demo-actions">
         <div>
-          <p class="eyebrow">Governed semantic discovery</p>
-          <h2 id="explore-heading">Ask a business question. Get an answer you can trust.</h2>
-          <p class="lede">
-            The platform returns certified data context, shows the evidence behind ranking,
-            and asks for clarification when definitions are not interchangeable.
-          </p>
+          <strong>Demo runtime signals</strong>
+          <p>Load fresh, passing pipeline data for the finance revenue dataset.</p>
         </div>
-        <div class="guardrail-callout">
-          <span class="callout-icon" aria-hidden="true">✓</span>
-          <div>
-            <strong>Guardrail active</strong>
-            <p>AI reasons; deterministic policy controls selection.</p>
-          </div>
-        </div>
-      </section>
-
-      <section class="explorer" aria-label="Dataset discovery">
-        <form id="discovery-form" class="question-form">
-          <label for="question">Business question</label>
-          <div class="question-row">
-            <input
-              id="question"
-              name="question"
-              value="What was net revenue last quarter?"
-              autocomplete="off"
-              required
-            />
-            <select id="mode" name="mode" aria-label="Discovery mode">
-              <option value="hybrid" selected>Hybrid discovery</option>
-              <option value="deterministic">Deterministic discovery</option>
-            </select>
-            <button type="submit" id="discover-button">Discover data</button>
-          </div>
-          <div class="example-row" aria-label="Example questions">
-            <span>Try:</span>
-            <button type="button" class="example" data-question="What was net revenue last quarter?">
-              Ambiguous revenue
-            </button>
-            <button type="button" class="example" data-question="What was Finance recognized net revenue last quarter?">
-              Finance revenue
-            </button>
-            <button type="button" class="example" data-question="What was completed order revenue last quarter?">
-              Operations revenue
-            </button>
-          </div>
-        </form>
-
-        <div class="demo-actions">
-          <div>
-            <strong>Demo runtime signals</strong>
-            <p>Load fresh, passing pipeline data for the finance revenue dataset.</p>
-          </div>
-          <button type="button" class="secondary-button" id="load-runtime-button">
-            Load runtime context
-          </button>
-        </div>
-      </section>
+        <button type="button" class="secondary-button" id="load-runtime-button">
+          Load runtime context
+        </button>
+      </div>
 
       <p class="feedback" id="feedback" role="status" aria-live="polite"></p>
 
       <section class="results-layout" aria-label="Discovery results">
-        <section class="result-panel" aria-labelledby="result-heading">
+        
+        <!-- Left Pane: Chat -->
+        <section class="chat-panel" aria-labelledby="chat-heading">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">Discovery result</p>
-              <h2 id="result-heading">Awaiting a question</h2>
+              <p class="eyebrow">Governed Discovery</p>
+              <h2 id="chat-heading">Agent Chat</h2>
             </div>
             <span class="status-badge neutral" id="status-badge">READY</span>
           </div>
-          <div id="result-summary" class="result-summary">
-            Ask a question to retrieve governed dataset candidates.
+
+          <div class="chat-history" id="chat-history" aria-live="polite">
+            <div class="chat-message agent">
+              <div class="message-content">
+                Hello. I am the Data Context Co-Pilot. I can help you find governed datasets. Try asking:<br/><br/>
+                <button type="button" class="example" data-question="What was net revenue last quarter?">What was net revenue last quarter?</button>
+              </div>
+            </div>
           </div>
-          <div class="candidate-list" id="candidate-list" aria-live="polite"></div>
+
+          <form id="chat-form" class="chat-input-area">
+            <input
+              id="question"
+              name="question"
+              placeholder="Ask a business question..."
+              autocomplete="off"
+              required
+            />
+            <button type="submit" id="send-button">Send</button>
+          </form>
         </section>
 
+        <!-- Right Pane: Evidence -->
         <aside class="detail-panel" aria-labelledby="detail-heading">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">Dataset context</p>
+              <p class="eyebrow">Deterministic Evidence</p>
               <h2 id="detail-heading">Select a candidate</h2>
             </div>
           </div>
+          <div id="candidate-list" class="candidate-list" aria-live="polite"></div>
           <div class="empty-detail" id="detail-content">
             Ranking evidence, semantic definitions, and operational trust signals will appear here.
           </div>
@@ -117,7 +87,7 @@
       </section>
 
       <footer>
-        Semantic registry → governed retrieval → runtime context → agent-ready capability
+        Semantic registry → governed retrieval → reasoning provider → agent-ready capability
       </footer>
     </main>
     <script src="/static/app.js" defer></script>
