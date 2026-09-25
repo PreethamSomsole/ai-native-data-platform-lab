@@ -152,6 +152,53 @@ python -m ai_data_platform serve --state-dir var
 python -m ai_data_platform mcp --state-dir var
 ```
 
+### Crawl and review a DuckDB schema
+
+The crawler reads a local DuckDB database and writes candidate dataset contracts and a
+report to a separate review directory. Supply each path and the schema explicitly:
+
+```bash
+python -m ai_data_platform crawl \
+  --source /path/to/source.duckdb \
+  --schema main \
+  --registry registry \
+  --output var/crawler_review
+```
+
+For a synthetic source, use this demo runner instead; it creates the source and crawls it
+in one invocation. The runner refuses to overwrite an existing source database or a
+non-empty review directory:
+
+```bash
+python test_crawler.py \
+  --source var/crawler_onboarding_demo.duckdb \
+  --schema main \
+  --registry registry \
+  --output var/crawler_review \
+  --seed-demo
+```
+
+Review `var/crawler_review/crawl_report.yaml`, then edit the generated YAML under
+`var/crawler_review/datasets/`. Correct the guessed `name` and `domain` there and supply
+business fields such as grain, owner, use cases, freshness, and canonical semantic IDs.
+Observed schema/profile facts and heuristic assessments are separate report sections. The
+default profile fully reads tables up to 10,000 rows; larger tables use a repeatable
+reservoir sample of at most 10,000 rows (seed 42), so rare anomalies can still be missed.
+
+Validate the edited drafts against the canonical semantic registry before promoting any
+contract:
+
+```bash
+python -m ai_data_platform validate-drafts \
+  --drafts var/crawler_review \
+  --registry registry
+```
+
+This checks contract fields and semantic references without writing to `registry/`. After
+review and a successful validation, copy only the approved contract files into
+`registry/datasets/`, then run the usual registry validation and discovery commands. See
+[the M6 crawler boundaries and acceptance criteria](docs/milestone-6-ai-native-engineering.md#schema-crawler-onboarding).
+
 `EngineeringService` is a protocol-independent local DEV capability boundary. It
 recommends ingestion patterns, produces approval-aware pipeline plans, validates proposed
 dataset contracts, runs only configured validation profiles, reconciles bounded DuckDB

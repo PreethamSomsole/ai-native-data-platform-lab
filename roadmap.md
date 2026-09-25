@@ -186,10 +186,15 @@ Use the platform to help agents build and operate data systems.
 
 Start with capabilities before multiple specialized agents.
 
-Status: local DEV reference implementation complete; environment-specific adapters,
-Git workflow execution, and specialized agent orchestration remain future work.
+Status: local DEV reference implementation complete, including a manual DuckDB crawler
+onboarding path; environment-specific adapters, Git workflow execution, and specialized
+agent orchestration remain future work.
 
 Reference implementation:
+- review-first local DuckDB schema crawler with explicit source/schema/registry/output paths
+- editable, uncertified draft contracts and an observed-facts / heuristic-assessments report
+- repeatable reservoir profiling above a 10,000-row per-table default cap
+- separate draft validation against canonical semantic references, with no automatic promotion
 - deterministic ingestion-pattern recommendation
 - approval-aware pipeline planning
 - proposed dataset-contract validation against canonical semantics
@@ -244,6 +249,29 @@ Policy/approval dependent:
 
 Autonomous destructive actions should require an automated recovery path. Rollback is
 part of the deterministic tool contract, not something the LLM is expected to remember.
+
+### Schema crawler onboarding path
+
+The crawler is a local, curator-operated M6 workflow; agent/MCP integration is deferred.
+It reads local DuckDB schema metadata and bounded profile samples, writes YAML and a report to
+a separate review directory, and never writes into the source database or `registry/`.
+Curators correct `name` and `domain` guesses and supply business semantics by editing draft
+YAML. A distinct validator overlays those drafts on the canonical registry in memory and
+checks contract shape and semantic references. Promotion remains a reviewed copy into
+`registry/datasets/`, followed by the existing registry validation and discovery flow.
+
+Profile acceptance is a full profile for tables up to 10,000 rows and a repeatable seeded
+reservoir sample of at most 10,000 rows for larger tables. Reports label complete versus
+partial coverage, method, sample size, and limitations. Sampling can miss rare anomalies.
+`observed_facts` describe physical schema and sampled values; name-based inference and drift
+alerts belong under `heuristic_assessments` and cannot certify a dataset.
+
+Before exposing any crawler capability to an agent tool, acceptance requires a documented
+path with explicit source, schema, registry, and output arguments; editable drafts outside
+the canonical registry; deterministic validation of all semantic references; and a lifecycle
+demonstration that validates one corrected contract, stages it in an isolated registry, and
+discovers it through the existing platform. Agent tools must not gain crawler filesystem,
+SQL, source-write, or promotion authority as part of this M6 addition.
 
 ## Milestone 7 — Snowflake mapping
 

@@ -1,5 +1,6 @@
 """Governed local DEV capabilities for AI-native data engineering."""
 
+from .crawler import SchemaCrawler, validate_crawler_drafts
 from .models import (
     ApprovalRequirement,
     ContractValidationResult,
@@ -37,6 +38,8 @@ __all__ = [
     "RestoreTableRequest",
     "SafeReplaceRequest",
     "SafeReplaceResult",
+    "SchemaCrawler",
+    "validate_crawler_drafts",
     "SourceKind",
     "ToolStatus",
 ]
