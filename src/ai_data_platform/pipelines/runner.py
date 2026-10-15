@@ -252,7 +252,9 @@ class PipelineRunner:
                 spec, RunStatus.FAILED_ERROR, started_at, started, run_id=run_id,
                 row_count=outcome.row_count, checks=outcome.checks, message=publication.message,
             )
-        self.engineering.prune_backups(target, keep=self.keep_backups)
+        self.engineering.prune_backups(
+            target, keep=self.keep_backups, preserve=publication.backup_table
+        )
         return self._result(
             spec, RunStatus.SUCCEEDED, started_at, started, run_id=run_id,
             row_count=outcome.row_count, published_row_count=outcome.row_count,

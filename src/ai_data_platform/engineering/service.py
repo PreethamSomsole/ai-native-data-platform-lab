@@ -108,7 +108,8 @@ class EngineeringService:
 
     @staticmethod
     def _backup_name(table_name: str, purpose: str) -> str:
-        timestamp = datetime.now(tz=UTC).strftime("%Y%m%d%H%M%S")
+        # Microseconds keep lexicographic order equal to creation order for pruning.
+        timestamp = datetime.now(tz=UTC).strftime("%Y%m%d%H%M%S%f")
         return f"{table_name}__{purpose}__{timestamp}_{uuid4().hex[:8]}"
 
     def _connect(self) -> duckdb.DuckDBPyConnection:
@@ -474,8 +475,13 @@ class EngineeringService:
             message="Initial publication completed.",
         )
 
-    def prune_backups(self, table_name: str, *, keep: int = 1) -> list[str]:
-        """Drop all but the newest ``keep`` safe-replace backups of one DEV table."""
+    def prune_backups(
+        self, table_name: str, *, keep: int = 1, preserve: str | None = None
+    ) -> list[str]:
+        """Drop all but the newest ``keep`` safe-replace backups of one DEV table.
+
+        ``preserve`` (normally the backup returned by the latest replacement) is always kept.
+        """
         self._quote_identifier(table_name)
         if keep < 1:
             raise EngineeringToolError("INVALID_ARGUMENT", "keep must be at least 1")
@@ -491,7 +497,9 @@ class EngineeringService:
                 ).fetchall()
                 if name.startswith(prefix)
             )
-            dropped = backups[:-keep]
+            kept = [preserve] if preserve in backups else []
+            kept += [name for name in reversed(backups) if name != preserve][: keep - len(kept)]
+            dropped = [name for name in backups if name not in kept]
             for name in dropped:
                 connection.execute(f"DROP TABLE {self._quote_identifier(name)}")
         finally:
