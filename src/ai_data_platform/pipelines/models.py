@@ -9,7 +9,10 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-_DATASET_ID = r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$"
+# Segments cannot contain "__" (or end in "_"), so the "." -> "__" physical-name mapping is
+# injective and cannot collide with runner names such as raw__*, *__backup__*, *__staging_*.
+_SEGMENT = r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*"
+_DATASET_ID = rf"^{_SEGMENT}\.{_SEGMENT}$"
 _COLUMN = r"^[a-z_][a-z0-9_]*$"
 
 

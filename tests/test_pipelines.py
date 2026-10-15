@@ -485,5 +485,27 @@ class SpecParsingTests(unittest.TestCase):
             SourceSpec(id="tpch.orders", description="x", format="parquet", path="../../etc/passwd", owner="x")
 
 
+class ProjectConfigurationTests(unittest.TestCase):
+    def test_malformed_sources_manifest_is_a_validation_error(self) -> None:
+        for content in ("sources: [unclosed", "- a\n- b\n", "sources:\n", "sources: 5\n"):
+            with self.subTest(content=content), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "specs").mkdir()
+                (root / "sources.yaml").write_text(content)
+                with self.assertRaises(PipelineValidationError):
+                    load_pipeline_project(root)
+
+    def test_ids_that_could_collide_as_physical_tables_are_rejected(self) -> None:
+        from ai_data_platform.pipelines.models import SourceSpec
+
+        for identifier in ("foo.bar__baz", "foo__bar.baz", "raw.tpch__lineitem", "gold.x_"):
+            with self.subTest(identifier=identifier), self.assertRaises(ValueError):
+                SourceSpec(id=identifier, description="x", format="parquet", path="a.parquet", owner="o")
+        spec = yaml.safe_load((PIPELINES / "specs" / "gold_order_revenue.yaml").read_text())
+        spec["output"] = "gold.order__revenue"
+        with self.assertRaises(PipelineValidationError):
+            parse_pipeline_spec(spec)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -97,8 +97,13 @@ def load_pipeline_project(directory: str | Path) -> PipelineProject:
     sources_file = root / "sources.yaml"
     if not sources_file.is_file():
         raise PipelineValidationError([f"missing {sources_file}"])
-    raw_sources = (_read_yaml(sources_file) or {}).get("sources", [])
-    for index, raw in enumerate(raw_sources):
+    try:
+        document = _read_yaml(sources_file)
+    except yaml.YAMLError as error:
+        raise PipelineValidationError([f"{sources_file}: invalid YAML: {error}"]) from error
+    if not isinstance(document, dict) or not isinstance(document.get("sources"), list):
+        raise PipelineValidationError([f"{sources_file}: expected a mapping with a 'sources' list"])
+    for index, raw in enumerate(document["sources"]):
         try:
             source = SourceSpec.model_validate(raw)
         except ValidationError as error:

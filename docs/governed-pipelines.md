@@ -54,6 +54,10 @@ Check types are `not_null`, `unique`, `accepted_values`, `range`, and `row_count
 non-nullable contract column also gets an implicit `not_null` check. Reconciliations compare
 two scalar SELECTs within a tolerance; `{{ this }}` is the candidate output.
 
+Source and output IDs are `<segment>.<segment>`, where segments are lowercase words joined by
+single underscores. Disallowing `__` keeps the physical table mapping (`silver.order_events` to
+`silver__order_events`) unambiguous.
+
 Dataset contracts now carry optional `columns` (`name`, `type`, `nullable`, `description`). A
 pipeline cannot publish a contract without them.
 
