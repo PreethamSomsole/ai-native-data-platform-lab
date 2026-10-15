@@ -254,6 +254,36 @@ class PipelineRunnerTests(PipelineHarness):
         self.assertEqual(after.last_successful_run_at, before.last_successful_run_at)
         self.assertGreater(after.observed_at, before.observed_at)
 
+    def test_first_run_skips_record_unproduced_outputs_as_stale(self) -> None:
+        self.runner.ingest()
+        silver = self.project.pipelines["pipeline.silver_order_events"]
+        self.project.pipelines[silver.id] = silver.model_copy(
+            update={"quality_checks": [*silver.quality_checks, RowCountCheck(check="row_count", min=10_000)]}
+        )
+        self.runner.run()
+        skipped = self.runtime.get_latest("gold.finance_revenue")
+        self.assertIsNotNone(skipped)
+        self.assertEqual(skipped.freshness_status, FreshnessStatus.STALE)
+        self.assertEqual(skipped.quality_status, QualityStatus.UNKNOWN)
+        self.assertEqual(skipped.operational_health, OperationalHealth.UNKNOWN)
+        self.assertIsNone(skipped.last_successful_run_at)
+
+    def test_ingestion_expands_wildcards_in_directory_components(self) -> None:
+        from ai_data_platform.pipelines.models import SourceSpec
+
+        partitioned = self.data / "tpch_partitioned" / "region=all"
+        partitioned.mkdir(parents=True)
+        shutil.copy(self.data / "tpch" / "orders.parquet", partitioned / "orders.parquet")
+        self.project.sources["tpch.orders"] = SourceSpec(
+            id="tpch.orders",
+            description="partitioned orders",
+            format="parquet",
+            path="tpch_partitioned/region=*/*.parquet",
+            owner="o",
+        )
+        result = self.runner.ingest(["tpch.orders"])[0]
+        self.assertEqual(result.row_count, 4)
+
     def test_renamed_pipeline_replaces_lineage_for_its_output(self) -> None:
         self.runner.ingest()
         self.runner.run()

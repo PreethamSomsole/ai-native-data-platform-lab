@@ -113,7 +113,7 @@ For each pipeline in dependency order:
 | succeeded | fresh | passing | healthy |
 | failed_quality / failed_contract | stale | failing | degraded |
 | failed_error | stale | unknown | failed |
-| skipped (upstream did not publish) | stale | unchanged | unchanged |
+| skipped (upstream did not publish) | stale | unchanged (unknown if never built) | unchanged (unknown if never built) |
 
 Failures and skips keep the previous `last_successful_run_at`. A skipped dataset's published
 data was validated and has not changed, so only its freshness changes. Discovery then applies the existing,

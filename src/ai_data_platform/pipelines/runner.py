@@ -110,7 +110,7 @@ class PipelineRunner:
             for source_id in selected:
                 source = self.project.sources[source_id]
                 path = self._source_path(source.path)
-                if not any(path.parent.glob(path.name)):
+                if not any(self.data_directory.glob(source.path)):
                     raise PipelineValidationError(
                         [f"no files match {path} for {source_id}; generate sample data first"]
                     )
@@ -303,19 +303,22 @@ class PipelineRunner:
             spec_sha256=spec_hash,
         )
         if self.runtime_repository is not None:
-            observation = self._observation(spec, result)
-            if observation is not None:
-                self.runtime_repository.record(observation)
+            self.runtime_repository.record(self._observation(spec, result))
 
     def _observation(
         self, spec: PipelineSpec, result: PipelineRunResult
-    ) -> DatasetRuntimeMetadata | None:
+    ) -> DatasetRuntimeMetadata:
         previous = self.runtime_repository.get_latest(spec.output) if self.runtime_repository else None
         if result.status is RunStatus.SKIPPED:
-            # Not refreshed this run, so stale; the published data and its validated quality
-            # are unchanged, so quality and health carry over.
+            # Not refreshed this run, so stale. Published data and its validated quality are
+            # unchanged, so quality and health carry over; a never-built output stays unknown.
             if previous is None:
-                return None
+                return DatasetRuntimeMetadata(
+                    dataset_id=spec.output,
+                    observed_at=result.finished_at,
+                    source=f"pipeline_runner:{spec.id}",
+                    freshness_status=FreshnessStatus.STALE,
+                )
             return previous.model_copy(
                 update={
                     "observed_at": result.finished_at,
