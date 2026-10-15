@@ -283,7 +283,11 @@ class PipelineRunner:
                 ],
             )
             if result.status is RunStatus.SUCCEEDED:
-                connection.execute(f"DELETE FROM {LINEAGE_TABLE} WHERE pipeline_id = ?", [spec.id])
+                # One producer per output: replace by output so renamed pipelines leave no stale edges.
+                connection.execute(
+                    f"DELETE FROM {LINEAGE_TABLE} WHERE pipeline_id = ? OR output = ?",
+                    [spec.id, spec.output],
+                )
                 for edge in self.project.lineage():
                     if edge.pipeline_id == spec.id:
                         connection.execute(
@@ -298,11 +302,27 @@ class PipelineRunner:
             status=result.status.value,
             spec_sha256=spec_hash,
         )
-        if self.runtime_repository is not None and result.status is not RunStatus.SKIPPED:
-            self.runtime_repository.record(self._observation(spec, result))
+        if self.runtime_repository is not None:
+            observation = self._observation(spec, result)
+            if observation is not None:
+                self.runtime_repository.record(observation)
 
-    def _observation(self, spec: PipelineSpec, result: PipelineRunResult) -> DatasetRuntimeMetadata:
+    def _observation(
+        self, spec: PipelineSpec, result: PipelineRunResult
+    ) -> DatasetRuntimeMetadata | None:
         previous = self.runtime_repository.get_latest(spec.output) if self.runtime_repository else None
+        if result.status is RunStatus.SKIPPED:
+            # Not refreshed this run, so stale; the published data and its validated quality
+            # are unchanged, so quality and health carry over.
+            if previous is None:
+                return None
+            return previous.model_copy(
+                update={
+                    "observed_at": result.finished_at,
+                    "source": f"pipeline_runner:{spec.id}",
+                    "freshness_status": FreshnessStatus.STALE,
+                }
+            )
         succeeded = result.status is RunStatus.SUCCEEDED
         if succeeded:
             quality = QualityStatus.PASSING

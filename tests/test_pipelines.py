@@ -27,6 +27,7 @@ from ai_data_platform.pipelines import (
 )
 from ai_data_platform.pipelines.dbt import export_dbt_project
 from ai_data_platform.pipelines.factory import open_runtime_repository
+from ai_data_platform.pipelines.models import RowCountCheck
 from ai_data_platform.pipelines.sql import render, sandboxed_connection, validate_select
 from ai_data_platform.runtime import FreshnessStatus, OperationalHealth, QualityStatus
 from ai_data_platform.sample_data import SampleDataError, download_nyc_taxi, generate_tpch
@@ -236,6 +237,37 @@ class PipelineRunnerTests(PipelineHarness):
         self.assertEqual(latest.freshness_status, FreshnessStatus.STALE)
         self.assertEqual(latest.last_successful_run_at, first_success)
 
+    def test_skipped_downstream_is_marked_stale_but_keeps_validated_quality(self) -> None:
+        self.runner.ingest()
+        self.runner.run()
+        before = self.runtime.get_latest("gold.finance_revenue")
+        silver = self.project.pipelines["pipeline.silver_order_events"]
+        self.project.pipelines[silver.id] = silver.model_copy(
+            update={"quality_checks": [*silver.quality_checks, RowCountCheck(check="row_count", min=10_000)]}
+        )
+        results = {result.pipeline_id: result for result in self.runner.run([silver.id])}
+        self.assertEqual(results["pipeline.gold_finance_revenue"].status, RunStatus.SKIPPED)
+        after = self.runtime.get_latest("gold.finance_revenue")
+        self.assertEqual(after.freshness_status, FreshnessStatus.STALE)
+        self.assertEqual(after.quality_status, before.quality_status)
+        self.assertEqual(after.operational_health, before.operational_health)
+        self.assertEqual(after.last_successful_run_at, before.last_successful_run_at)
+        self.assertGreater(after.observed_at, before.observed_at)
+
+    def test_renamed_pipeline_replaces_lineage_for_its_output(self) -> None:
+        self.runner.ingest()
+        self.runner.run()
+        spec = self.project.pipelines.pop("pipeline.gold_product_performance")
+        renamed = spec.model_copy(update={"id": "pipeline.gold_brand_performance"})
+        self.project.pipelines[renamed.id] = renamed
+        self.runner.run([renamed.id])
+        producers = {
+            row["pipeline_id"]
+            for row in self.runner.verified_lineage()
+            if row["output"] == "gold.product_performance"
+        }
+        self.assertEqual(producers, {"pipeline.gold_brand_performance"})
+
     def test_contract_type_drift_blocks_publication(self) -> None:
         self.runner.ingest()
         spec = self.project.pipelines["pipeline.silver_order_events"]
@@ -337,6 +369,26 @@ class McpPipelineToolTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 current.close()
                 history.close()
+
+
+class McpRegistryCouplingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_custom_registry_starts_without_bundled_pipeline_tools(self) -> None:
+        from ai_data_platform.mcp.server import create_mcp_server_from_paths, resolve_pipelines_path
+
+        with tempfile.TemporaryDirectory() as directory:
+            custom = Path(directory) / "registry"
+            shutil.copytree(REGISTRY, custom)
+            (custom / "datasets" / "gold_product_performance.yaml").unlink()
+            self.assertIsNone(resolve_pipelines_path(custom, None))
+            self.assertEqual(resolve_pipelines_path(REGISTRY, None), PIPELINES)
+            self.assertEqual(resolve_pipelines_path(custom, PIPELINES), PIPELINES)
+            server = create_mcp_server_from_paths(
+                custom, Path(directory) / "state", resolve_pipelines_path(custom, None)
+            )
+            async with server.settings.lifespan(server):
+                names = {tool.name for tool in await server.list_tools()}
+            self.assertIn("discover_datasets", names)
+            self.assertNotIn("dry_run_pipeline_proposal", names)
 
 
 class DbtExportTests(unittest.TestCase):

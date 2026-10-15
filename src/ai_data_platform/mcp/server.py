@@ -256,6 +256,23 @@ def _register_pipeline_tools(server: MCPServer, service: PipelineAuthoringServic
         return _tool_call(service.submit_proposal, spec_yaml, contract_yaml, rationale)
 
 
+def resolve_pipelines_path(registry_path: str | Path, explicit: str | Path | None) -> Path | None:
+    """Pipelines directory for the MCP server, or None to omit pipeline tools.
+
+    Order: an explicit path, then AI_DATA_PLATFORM_PIPELINES, then the bundled pipelines
+    only when the bundled registry is in use (bundled specs target bundled contracts).
+    """
+    if explicit is not None:
+        return Path(explicit)
+    configured = os.getenv("AI_DATA_PLATFORM_PIPELINES")
+    if configured:
+        return Path(configured)
+    project_root = Path(__file__).resolve().parents[3]
+    if Path(registry_path).resolve() == (project_root / "registry").resolve():
+        return project_root / "pipelines"
+    return None
+
+
 def create_pipeline_authoring_service(
     registry, pipelines_path: Path, state_directory: Path
 ) -> PipelineAuthoringService | None:
@@ -318,10 +335,9 @@ def create_default_mcp_server() -> MCPServer:
         os.getenv("AI_DATA_PLATFORM_REGISTRY", str(project_root / "registry"))
     )
     state_directory = Path(os.getenv("AI_DATA_PLATFORM_STATE_DIR", "var"))
-    pipelines_path = Path(
-        os.getenv("AI_DATA_PLATFORM_PIPELINES", str(project_root / "pipelines"))
+    return create_mcp_server_from_paths(
+        registry_path, state_directory, resolve_pipelines_path(registry_path, None)
     )
-    return create_mcp_server_from_paths(registry_path, state_directory, pipelines_path)
 
 
 def main() -> None:

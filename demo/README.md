@@ -29,7 +29,7 @@ python demo/showcase.py --scale 10       # ~60M lines; regenerate var/data first
 | 3. Pipelines | Seven pipelines, about 12s, every check passing | Specs are YAML + one SELECT; gates are declarative; publishing is atomic with a backup |
 | 4. Analytics | Three definitions diverge by billions near TPC-H's as-of date; DuckDB answers in milliseconds | "Net revenue" really is ambiguous, so the platform must not guess |
 | 5. Discovery | `CLARIFICATION_REQUIRED`, then `RESOLVED` with runtime reasons; verified lineage tree | Pipelines feed freshness, quality, and lineage back into AI context |
-| 6. Bad batch | An orphan line and a sign-flipped price: range and reconciliation gates fail, downstream is skipped, the dataset drops 40 points in discovery, then recovers | Bad data never reaches consumers, and AI consumers can see the degradation |
+| 6. Bad batch | An orphan line and a sign-flipped price: range and reconciliation gates fail, downstream is skipped and marked stale, the failing dataset drops 40 points in discovery, then everything recovers | Bad data never reaches consumers, and AI consumers can see the degradation |
 | 7. Agent | Unsafe SQL and self-certification rejected; a valid proposal dry-runs and is queued for review | Agents get real engineering capability, with deterministic limits |
 | 8. dbt | The same specs compile to a contract-enforced dbt project; `dbt build` passes 39 nodes | The governance model carries over to dbt, warehouses, and Databricks |
 

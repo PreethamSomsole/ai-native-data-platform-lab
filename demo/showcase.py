@@ -278,7 +278,10 @@ def step_bad_batch(presenter: Presenter, paths: PlatformPaths, environment, cont
     presenter.note(f"Wrote {target.relative_to(PROJECT_ROOT) if target.is_relative_to(PROJECT_ROOT) else target}")
     environment.runner.ingest(["tpch.lineitem"])
     print_run_results(environment.runner.run(["pipeline.silver_order_events"]))
-    presenter.note("Same question after the failed run: silver.order_events loses 40 points and drops in rank.")
+    presenter.note(
+        "Same question after the failed run: silver.order_events loses 40 points (stale, failing, "
+        "degraded). The skipped downstream datasets lose 20 for staleness but keep their validated quality."
+    )
     show_discovery(context, question)
     print()
     presenter.note("Remove the bad file, re-land, and re-run: the platform recovers on its own.")

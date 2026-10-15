@@ -109,8 +109,10 @@ For each pipeline in dependency order:
 | succeeded | fresh | passing | healthy |
 | failed_quality / failed_contract | stale | failing | degraded |
 | failed_error | stale | unknown | failed |
+| skipped (upstream did not publish) | stale | unchanged | unchanged |
 
-Failures keep the previous `last_successful_run_at`. Discovery then applies the existing,
+Failures and skips keep the previous `last_successful_run_at`. A skipped dataset's published
+data was validated and has not changed, so only its freshness changes. Discovery then applies the existing,
 explained runtime ranking: a failing run moves a dataset by -40 points relative to its
 healthy state, without changing ambiguity outcomes.
 

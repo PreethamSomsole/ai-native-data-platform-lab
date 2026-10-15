@@ -58,6 +58,12 @@ def main() -> int:
     mcp_parser.add_argument(
         "--state-dir", type=Path, default=Path("var"), help="SQLite and DuckDB directory."
     )
+    mcp_parser.add_argument(
+        "--pipelines",
+        type=Path,
+        default=None,
+        help="Pipeline project for authoring tools (default: bundled, with the bundled registry).",
+    )
     subparsers.add_parser("validate", help="Validate registry metadata and references.")
     crawl_parser = subparsers.add_parser(
         "crawl", help="Crawl a DuckDB schema into an editable review area."
@@ -175,9 +181,10 @@ def main() -> int:
         return 0
     if args.command == "mcp":
         from ai_data_platform.mcp import create_mcp_server_from_paths
+        from ai_data_platform.mcp.server import resolve_pipelines_path
 
         server = create_mcp_server_from_paths(
-            args.registry, args.state_dir, Path(__file__).resolve().parents[2] / "pipelines"
+            args.registry, args.state_dir, resolve_pipelines_path(args.registry, args.pipelines)
         )
         server.run(transport="stdio")
         return 0
