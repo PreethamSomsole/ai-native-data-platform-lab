@@ -157,6 +157,13 @@ def _reconcile(
             raise ValueError(f"reconciliation '{reconciliation.name}' SQL must return one scalar")
         values.append(_decimal(rows[0][0]))
     expected, actual = values
+    non_finite = [value for value in values if value is not None and not value.is_finite()]
+    if non_finite:
+        return CheckOutcome(
+            name=f"reconcile: {reconciliation.name}",
+            passed=False,
+            detail=f"expected={expected} actual={actual}: reconciliation values must be finite (value is not finite)",
+        )
     if expected is None or actual is None:
         passed = expected is None and actual is None
         difference = None

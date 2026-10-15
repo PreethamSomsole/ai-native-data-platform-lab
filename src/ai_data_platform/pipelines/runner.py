@@ -99,49 +99,63 @@ class PipelineRunner:
             raise PipelineValidationError([f"source path '{relative}' escapes the data directory"])
         return path
 
+    def _source_files(self, source_id: str) -> list[Path]:
+        """Expand and validate one source's files before anything is replaced.
+
+        DuckDB receives this explicit list, so a symlinked directory matched by a wildcard
+        cannot pull in files outside the data directory.
+        """
+        source = self.project.sources[source_id]
+        path = self._source_path(source.path)
+        files = sorted({match.resolve() for match in self.data_directory.glob(source.path)})
+        if not files:
+            raise PipelineValidationError(
+                [f"no files match {path} for {source_id}; generate sample data first"]
+            )
+        escaped = [str(item) for item in files if not item.is_relative_to(self.data_directory)]
+        if escaped:
+            raise PipelineValidationError(
+                [f"{source_id} matches files outside the data directory: {', '.join(escaped)}"]
+            )
+        return files
+
     def ingest(self, source_ids: list[str] | None = None) -> list[IngestionResult]:
-        """Land each source file set as a raw table (platform-controlled file access)."""
+        """Land source file sets as raw tables, all or nothing (platform-controlled file access)."""
         selected = source_ids or sorted(self.project.sources)
         unknown = sorted(set(selected) - set(self.project.sources))
         if unknown:
             raise PipelineValidationError([f"unknown sources: {', '.join(unknown)}"])
+        plan = [(source_id, self._source_files(source_id)) for source_id in selected]
         results = []
         with self._connect() as connection:
-            for source_id in selected:
-                source = self.project.sources[source_id]
-                path = self._source_path(source.path)
-                # Expand here and pass DuckDB an explicit, validated file list, so a symlinked
-                # directory matched by a wildcard cannot pull in files outside the data directory.
-                files = sorted({match.resolve() for match in self.data_directory.glob(source.path)})
-                if not files:
-                    raise PipelineValidationError(
-                        [f"no files match {path} for {source_id}; generate sample data first"]
+            # One transaction, so a failing source cannot leave a mix of old and new snapshots.
+            connection.execute("BEGIN TRANSACTION")
+            try:
+                for source_id, files in plan:
+                    reader = (
+                        "read_parquet(?, union_by_name = true)"
+                        if self.project.sources[source_id].format is SourceFormat.PARQUET
+                        else "read_csv(?, header = true, auto_detect = true)"
                     )
-                escaped = [str(item) for item in files if not item.is_relative_to(self.data_directory)]
-                if escaped:
-                    raise PipelineValidationError(
-                        [f"{source_id} matches files outside the data directory: {', '.join(escaped)}"]
+                    table = source_relation(source_id)
+                    started = time.perf_counter()
+                    connection.execute(
+                        f'CREATE OR REPLACE TABLE "{table}" AS SELECT * FROM {reader}',
+                        [[str(item) for item in files]],
                     )
-                reader = (
-                    "read_parquet(?, union_by_name = true)"
-                    if source.format is SourceFormat.PARQUET
-                    else "read_csv(?, header = true, auto_detect = true)"
-                )
-                table = source_relation(source_id)
-                started = time.perf_counter()
-                connection.execute(
-                    f'CREATE OR REPLACE TABLE "{table}" AS SELECT * FROM {reader}',
-                    [[str(item) for item in files]],
-                )
-                rows = connection.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
-                results.append(
-                    IngestionResult(
-                        source_id=source_id,
-                        raw_table=table,
-                        row_count=rows,
-                        duration_seconds=round(time.perf_counter() - started, 3),
+                    rows = connection.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+                    results.append(
+                        IngestionResult(
+                            source_id=source_id,
+                            raw_table=table,
+                            row_count=rows,
+                            duration_seconds=round(time.perf_counter() - started, 3),
+                        )
                     )
-                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
         for result in results:
             self.engineering.record_audit_event(
                 "ingest_source", source_id=result.source_id, raw_table=result.raw_table, row_count=result.row_count

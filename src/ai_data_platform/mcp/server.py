@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from functools import partial
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -27,6 +28,7 @@ from ai_data_platform.agent_tools import (
 from ai_data_platform.api import build_vector_index
 from ai_data_platform.context import ContextService, DiscoveryMode
 from ai_data_platform.embeddings import HashingEmbeddingProvider
+from ai_data_platform.engineering.service import append_audit_record
 from ai_data_platform.pipelines import (
     PipelineValidationError,
     load_pipeline_project,
@@ -290,12 +292,14 @@ def create_pipeline_authoring_service(
         )
     project = load_pipeline_project(pipelines_path)
     validate_pipeline_project(project, registry)
+    state_directory.mkdir(parents=True, exist_ok=True)
     return PipelineAuthoringService(
         registry,
         project,
         state_directory / "engineering.duckdb",
         state_directory / "pipeline_proposals",
         temp_directory=state_directory / "duckdb_tmp",
+        audit=partial(append_audit_record, state_directory / "engineering-audit.jsonl"),
     )
 
 

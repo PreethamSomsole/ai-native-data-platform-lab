@@ -39,6 +39,13 @@ _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _ALLOWED_ARTIFACT_SUFFIXES = {".py", ".sql", ".yaml", ".yml"}
 
 
+def append_audit_record(path: Path, action: str, **details: object) -> None:
+    """Append one JSONL audit record; shared by every state-changing platform capability."""
+    entry = {"observed_at": datetime.now(tz=UTC).isoformat(), "action": action, **details}
+    with path.open("a", encoding="utf-8") as audit_file:
+        audit_file.write(json.dumps(entry, sort_keys=True) + "\n")
+
+
 class EngineeringToolError(ValueError):
     """Stable failure for callers and future protocol adapters."""
 
@@ -177,9 +184,7 @@ class EngineeringService:
             connection.execute(rewritten_index_sql)
 
     def _audit(self, action: str, **details: object) -> None:
-        entry = {"observed_at": datetime.now(tz=UTC).isoformat(), "action": action, **details}
-        with self.audit_path.open("a", encoding="utf-8") as audit_file:
-            audit_file.write(json.dumps(entry, sort_keys=True) + "\n")
+        append_audit_record(self.audit_path, action, **details)
 
     def recommend_ingestion_pattern(self, request: IngestionRequest) -> IngestionRecommendation:
         if request.source_kind is SourceKind.STREAM:

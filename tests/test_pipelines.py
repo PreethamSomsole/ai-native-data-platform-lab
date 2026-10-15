@@ -323,6 +323,37 @@ class PipelineRunnerTests(PipelineHarness):
         self.assertEqual(len(json.loads(completed.stdout)), 7)
         self.assertIn("landed tpch.lineitem", completed.stderr)
 
+    def test_failed_multi_source_ingest_leaves_raw_layer_unchanged(self) -> None:
+        self.runner.ingest()
+        before = self.query("SELECT COUNT(*) FROM raw__tpch__lineitem")[0][0]
+        with duckdb.connect() as connection:
+            connection.execute(
+                f"COPY (SELECT * FROM read_parquet('{self.data / 'tpch' / 'lineitem.parquet'}') LIMIT 1) "
+                f"TO '{self.data / 'tpch' / 'lineitem_extra.parquet'}' (FORMAT parquet)"
+            )
+        (self.data / "tpch" / "region.parquet").unlink()
+        with self.assertRaises(PipelineValidationError):
+            self.runner.ingest()
+        self.assertEqual(self.query("SELECT COUNT(*) FROM raw__tpch__lineitem")[0][0], before)
+
+    def test_non_finite_reconciliation_fails_the_check_not_the_run(self) -> None:
+        from ai_data_platform.pipelines.models import Reconciliation
+
+        self.runner.ingest()
+        spec = self.project.pipelines["pipeline.silver_order_events"]
+        self.project.pipelines[spec.id] = spec.model_copy(
+            update={
+                "reconciliations": [
+                    Reconciliation(
+                        name="nan", expected_sql="SELECT 'nan'::DOUBLE", actual_sql="SELECT COUNT(*) FROM {{ this }}"
+                    )
+                ]
+            }
+        )
+        result = self.runner.run([spec.id], include_downstream=False)[0]
+        self.assertEqual(result.status, RunStatus.FAILED_QUALITY)
+        self.assertIn("not finite", next(check.detail for check in result.checks if not check.passed))
+
     def test_renamed_pipeline_replaces_lineage_for_its_output(self) -> None:
         self.runner.ingest()
         self.runner.run()
@@ -412,6 +443,19 @@ class AuthoringTests(PipelineHarness):
         self.assertFalse(validation.valid)
         self.assertTrue(any("cycle" in error for error in validation.errors), validation.errors)
         self.assertFalse(self.service.dry_run(cyclic).passed)
+
+    def test_submitted_proposals_are_audited(self) -> None:
+        import json
+
+        submitted = self.service.submit_proposal(self.spec, self.contract, "audit me")
+        records = [
+            json.loads(line)
+            for line in (self.state / "engineering-audit.jsonl").read_text().splitlines()
+        ]
+        self.assertIn(
+            submitted.proposal_id,
+            [record.get("proposal_id") for record in records if record["action"] == "submit_pipeline_proposal"],
+        )
 
     def test_lineage_lists_upstream_and_downstream(self) -> None:
         node = self.service.lineage("silver.revenue_events")
