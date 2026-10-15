@@ -296,6 +296,21 @@ class PipelineAuthoringService:
         errors.extend(
             spec_errors(spec, sources=self.project.sources, contract=contract, available_datasets=produced)
         )
+        # Validate the dependency graph as it would be after promotion, with this proposal
+        # replacing any current producer of the same output.
+        promoted = PipelineProject(
+            sources=self.project.sources,
+            pipelines={
+                pipeline_id: item
+                for pipeline_id, item in self.project.pipelines.items()
+                if item.output != spec.output and pipeline_id != spec.id
+            }
+            | {spec.id: spec},
+        )
+        try:
+            promoted.execution_order()
+        except PipelineValidationError as error:
+            errors.extend(error.messages)
         with duckdb.connect() as parser:
             try:
                 rendered = render(spec.sql, sources=spec.inputs.sources, datasets=spec.inputs.datasets)

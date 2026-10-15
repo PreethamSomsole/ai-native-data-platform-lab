@@ -328,6 +328,22 @@ class AuthoringTests(PipelineHarness):
         self.assertEqual(sorted(path.name for path in package.iterdir()), ["contract.yaml", "pipeline.yaml", "review.json"])
         self.assertIn("new dataset contracts require approval", submitted.approval_reasons)
 
+    def test_proposals_that_create_dependency_cycles_are_rejected(self) -> None:
+        cyclic = yaml.safe_dump(
+            {
+                "id": "pipeline.silver_order_events",
+                "description": "Rebuild order events from a downstream gold table.",
+                "owner": "agent",
+                "output": "silver.order_events",
+                "inputs": {"datasets": ["gold.product_performance"]},
+                "sql": "SELECT * FROM {{ ref('gold.product_performance') }}",
+            }
+        )
+        validation = self.service.validate_proposal(cyclic)
+        self.assertFalse(validation.valid)
+        self.assertTrue(any("cycle" in error for error in validation.errors), validation.errors)
+        self.assertFalse(self.service.dry_run(cyclic).passed)
+
     def test_lineage_lists_upstream_and_downstream(self) -> None:
         node = self.service.lineage("silver.revenue_events")
         self.assertEqual(node.upstream_datasets, ["silver.order_events"])
