@@ -110,9 +110,17 @@ class PipelineRunner:
             for source_id in selected:
                 source = self.project.sources[source_id]
                 path = self._source_path(source.path)
-                if not any(self.data_directory.glob(source.path)):
+                # Expand here and pass DuckDB an explicit, validated file list, so a symlinked
+                # directory matched by a wildcard cannot pull in files outside the data directory.
+                files = sorted({match.resolve() for match in self.data_directory.glob(source.path)})
+                if not files:
                     raise PipelineValidationError(
                         [f"no files match {path} for {source_id}; generate sample data first"]
+                    )
+                escaped = [str(item) for item in files if not item.is_relative_to(self.data_directory)]
+                if escaped:
+                    raise PipelineValidationError(
+                        [f"{source_id} matches files outside the data directory: {', '.join(escaped)}"]
                     )
                 reader = (
                     "read_parquet(?, union_by_name = true)"
@@ -121,7 +129,10 @@ class PipelineRunner:
                 )
                 table = source_relation(source_id)
                 started = time.perf_counter()
-                connection.execute(f'CREATE OR REPLACE TABLE "{table}" AS SELECT * FROM {reader}', [str(path)])
+                connection.execute(
+                    f'CREATE OR REPLACE TABLE "{table}" AS SELECT * FROM {reader}',
+                    [[str(item) for item in files]],
+                )
                 rows = connection.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
                 results.append(
                     IngestionResult(

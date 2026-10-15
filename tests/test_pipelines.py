@@ -168,7 +168,10 @@ class SqlSafetyTests(unittest.TestCase):
             "SELECT * FROM sqlite_master": "not declared inputs",
             "SELECT * FROM memory.main.raw__tpch__orders": "not declared inputs",
             "SELECT * FROM sqlite_master, (WITH sqlite_master AS (SELECT 1) SELECT * FROM sqlite_master) t":
-                "not declared inputs",
+                "shadow existing relations",
+            "WITH leak AS (SELECT * FROM sqlite_master), sqlite_master AS (SELECT 1) SELECT * FROM leak":
+                "shadow existing relations",
+            "SELECT * FROM pg_class": "not declared inputs",
         }
         for sql, message in unsafe.items():
             with self.subTest(sql=sql), self.assertRaisesRegex(PipelineSqlError, message):
@@ -291,6 +294,34 @@ class PipelineRunnerTests(PipelineHarness):
         )
         result = self.runner.ingest(["tpch.orders"])[0]
         self.assertEqual(result.row_count, 4)
+
+    def test_ingestion_rejects_wildcard_matches_that_escape_through_symlinks(self) -> None:
+        from ai_data_platform.pipelines.models import SourceSpec
+
+        outside = Path(self.temporary.name) / "outside"
+        outside.mkdir()
+        shutil.copy(self.data / "tpch" / "orders.parquet", outside / "orders.parquet")
+        (self.data / "links").mkdir()
+        (self.data / "links" / "escape").symlink_to(outside, target_is_directory=True)
+        self.project.sources["tpch.orders"] = SourceSpec(
+            id="tpch.orders", description="x", format="parquet", path="links/*/*.parquet", owner="o"
+        )
+        with self.assertRaisesRegex(PipelineValidationError, "outside the data directory"):
+            self.runner.ingest(["tpch.orders"])
+
+    def test_json_mode_keeps_stdout_parseable_with_ingest(self) -> None:
+        import json
+        import subprocess
+        import sys
+
+        completed = subprocess.run(
+            [sys.executable, "-m", "ai_data_platform", "pipelines", "--state-dir", str(self.state / "cli"),
+             "--data-dir", str(self.data), "run", "--ingest", "--json"],
+            capture_output=True, text=True, check=False, cwd=PROJECT_ROOT,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(len(json.loads(completed.stdout)), 7)
+        self.assertIn("landed tpch.lineitem", completed.stderr)
 
     def test_renamed_pipeline_replaces_lineage_for_its_output(self) -> None:
         self.runner.ingest()

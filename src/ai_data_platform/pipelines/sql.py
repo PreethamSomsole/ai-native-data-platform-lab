@@ -120,29 +120,46 @@ def _table_functions(node: object) -> list[str]:
     return found
 
 
-def _table_references(node: object, visible_ctes: frozenset[str] = frozenset()) -> set[str]:
-    """Base-table references that are not CTEs visible in their own lexical scope."""
-    found: set[str] = set()
+def _base_tables(node: object) -> list[tuple[str, str, str]]:
+    found: list[tuple[str, str, str]] = []
+    if isinstance(node, dict):
+        if node.get("type") == "BASE_TABLE":
+            found.append(
+                (
+                    str(node.get("catalog_name") or ""),
+                    str(node.get("schema_name") or ""),
+                    str(node.get("table_name") or ""),
+                )
+            )
+        for value in node.values():
+            found.extend(_base_tables(value))
+    elif isinstance(node, list):
+        for value in node:
+            found.extend(_base_tables(value))
+    return found
+
+
+def _cte_names(node: object) -> set[str]:
+    names: set[str] = set()
     if isinstance(node, dict):
         cte_map = node.get("cte_map")
         if isinstance(cte_map, dict):
-            visible_ctes = visible_ctes | {
-                str(entry.get("key", "")).lower() for entry in cte_map.get("map", [])
-            }
-        if node.get("type") == "BASE_TABLE":
-            catalog = str(node.get("catalog_name") or "")
-            schema = str(node.get("schema_name") or "")
-            table = str(node.get("table_name") or "")
-            if catalog or schema:
-                found.add(".".join(part for part in (catalog, schema, table) if part))
-            elif table.lower() not in visible_ctes:
-                found.add(table)
+            names.update(str(entry.get("key", "")) for entry in cte_map.get("map", []))
         for value in node.values():
-            found |= _table_references(value, visible_ctes)
+            names |= _cte_names(value)
     elif isinstance(node, list):
         for value in node:
-            found |= _table_references(value, visible_ctes)
-    return found
+            names |= _cte_names(value)
+    return names
+
+
+def _resolves(connection: duckdb.DuckDBPyConnection, name: str) -> bool:
+    """True when an unqualified name already resolves to a relation (e.g. a system view)."""
+    try:
+        connection.execute('SELECT 1 FROM "' + name.replace('"', '""') + '" LIMIT 0')
+    except duckdb.Error:
+        return False
+    return True
 
 
 def validate_select(
@@ -176,9 +193,19 @@ def validate_select(
         for name in connection.get_table_names(sql, qualified=True)
     }
     # get_table_names omits system views (information_schema, pg_catalog, sqlite_master), so
-    # every base-table reference in the AST must also be a declared input or a CTE visible in
-    # the reference's own scope.
-    referenced |= _table_references(tree)
+    # every base-table reference in the AST must also be a declared input or a CTE. CTE names
+    # may not shadow a relation that already resolves, so an unqualified name can only ever
+    # mean a CTE, whatever its scope or declaration order.
+    ctes = _cte_names(tree)
+    shadowing = sorted(name for name in ctes if _resolves(connection, name))
+    if shadowing:
+        errors.append(f"CTE names shadow existing relations: {', '.join(shadowing)}")
+    lowered = {name.lower() for name in ctes}
+    for catalog, schema, table in _base_tables(tree):
+        if catalog or schema:
+            referenced.add(".".join(part for part in (catalog, schema, table) if part))
+        elif table.lower() not in lowered:
+            referenced.add(table)
     undeclared = sorted(referenced - allowed)
     if undeclared:
         errors.append(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from ai_data_platform.registry.loader import load_registry
@@ -103,8 +104,13 @@ def handle(args: argparse.Namespace) -> int | None:
     with open_pipeline_environment(_paths(args), memory_limit=args.memory_limit) as environment:
         runner = environment.runner
         if args.pipeline_command == "ingest" or (args.pipeline_command == "run" and args.ingest):
+            # With --json, stdout carries only the JSON document.
+            stream = sys.stderr if getattr(args, "json", False) else sys.stdout
             for item in runner.ingest(getattr(args, "sources", None)):
-                print(f"landed {item.source_id:16} -> {item.raw_table:24} {item.row_count:>12,} rows {item.duration_seconds:>6.2f}s")
+                print(
+                    f"landed {item.source_id:16} -> {item.raw_table:24} {item.row_count:>12,} rows {item.duration_seconds:>6.2f}s",
+                    file=stream,
+                )
         if args.pipeline_command == "run":
             results = runner.run(args.select)
             if args.json:

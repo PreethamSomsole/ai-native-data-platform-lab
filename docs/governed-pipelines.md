@@ -82,15 +82,17 @@ Transform SQL is untrusted input, whether a person or an agent wrote it:
 2. **Static analysis.** The rendered SQL must parse as exactly one `SELECT`. The DuckDB AST
    is checked for table functions (`read_csv`, `read_parquet`, `query_table`, ...), and every
    base-table reference, including system views such as `information_schema` and
-   `sqlite_master`, must be a declared input or a CTE defined in the same query. All
-   violations are reported together.
+   `sqlite_master`, must be a declared input or a CTE. CTE names may not shadow any relation
+   that already resolves, so an unqualified name can only ever mean a CTE, regardless of
+   scope or declaration order. All violations are reported together.
 3. **Sandboxed execution.** SQL runs on an in-memory DuckDB connection with the warehouse
    attached. Before user SQL runs, `enable_external_access` is turned off and
    `lock_configuration` is set, so files cannot be read, databases cannot be attached, and
    the settings cannot be re-enabled, even if a parser gap existed.
 
-Landing source files is a separate step that only the runner performs, from paths inside the
-configured data directory.
+Landing source files is a separate step that only the runner performs. Glob matches are
+expanded and resolved first, every file must lie inside the configured data directory (symlinks
+included), and DuckDB receives that explicit file list.
 
 ## Runner lifecycle
 
