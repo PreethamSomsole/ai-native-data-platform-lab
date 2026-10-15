@@ -150,6 +150,12 @@ class SqlSafetyTests(unittest.TestCase):
             'WITH o AS (SELECT * FROM wh.main."raw__tpch__orders") SELECT * FROM o',
             self.allowed,
         )
+        validate_select(
+            self.connection,
+            'WITH o AS (SELECT * FROM wh.main."raw__tpch__orders"), '
+            "p AS (WITH q AS (SELECT * FROM o) SELECT * FROM q) SELECT * FROM p",
+            self.allowed,
+        )
         unsafe = {
             "DROP TABLE wh.main.raw__tpch__orders": "only SELECT",
             "SELECT 1; SELECT 2": "exactly one statement",
@@ -161,6 +167,8 @@ class SqlSafetyTests(unittest.TestCase):
             "SELECT * FROM pg_catalog.pg_class": "not declared inputs",
             "SELECT * FROM sqlite_master": "not declared inputs",
             "SELECT * FROM memory.main.raw__tpch__orders": "not declared inputs",
+            "SELECT * FROM sqlite_master, (WITH sqlite_master AS (SELECT 1) SELECT * FROM sqlite_master) t":
+                "not declared inputs",
         }
         for sql, message in unsafe.items():
             with self.subTest(sql=sql), self.assertRaisesRegex(PipelineSqlError, message):
@@ -431,10 +439,13 @@ class McpRegistryCouplingTests(unittest.IsolatedAsyncioTestCase):
             server = create_mcp_server_from_paths(
                 custom, Path(directory) / "state", resolve_pipelines_path(custom, None)
             )
+            registry_for_typo = load_registry(REGISTRY)
             async with server.settings.lifespan(server):
                 names = {tool.name for tool in await server.list_tools()}
             self.assertIn("discover_datasets", names)
             self.assertNotIn("dry_run_pipeline_proposal", names)
+            with self.assertRaisesRegex(PipelineValidationError, "no sources.yaml"):
+                create_pipeline_authoring_service(registry_for_typo, Path(directory) / "typo", Path(directory))
 
 
 class DbtExportTests(unittest.TestCase):

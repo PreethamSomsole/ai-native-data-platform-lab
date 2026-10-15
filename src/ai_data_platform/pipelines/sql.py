@@ -120,37 +120,29 @@ def _table_functions(node: object) -> list[str]:
     return found
 
 
-def _base_tables(node: object) -> list[tuple[str, str, str]]:
-    found: list[tuple[str, str, str]] = []
-    if isinstance(node, dict):
-        if node.get("type") == "BASE_TABLE":
-            found.append(
-                (
-                    str(node.get("catalog_name") or ""),
-                    str(node.get("schema_name") or ""),
-                    str(node.get("table_name") or ""),
-                )
-            )
-        for value in node.values():
-            found.extend(_base_tables(value))
-    elif isinstance(node, list):
-        for value in node:
-            found.extend(_base_tables(value))
-    return found
-
-
-def _cte_names(node: object) -> set[str]:
-    names: set[str] = set()
+def _table_references(node: object, visible_ctes: frozenset[str] = frozenset()) -> set[str]:
+    """Base-table references that are not CTEs visible in their own lexical scope."""
+    found: set[str] = set()
     if isinstance(node, dict):
         cte_map = node.get("cte_map")
         if isinstance(cte_map, dict):
-            names.update(str(entry.get("key", "")).lower() for entry in cte_map.get("map", []))
+            visible_ctes = visible_ctes | {
+                str(entry.get("key", "")).lower() for entry in cte_map.get("map", [])
+            }
+        if node.get("type") == "BASE_TABLE":
+            catalog = str(node.get("catalog_name") or "")
+            schema = str(node.get("schema_name") or "")
+            table = str(node.get("table_name") or "")
+            if catalog or schema:
+                found.add(".".join(part for part in (catalog, schema, table) if part))
+            elif table.lower() not in visible_ctes:
+                found.add(table)
         for value in node.values():
-            names |= _cte_names(value)
+            found |= _table_references(value, visible_ctes)
     elif isinstance(node, list):
         for value in node:
-            names |= _cte_names(value)
-    return names
+            found |= _table_references(value, visible_ctes)
+    return found
 
 
 def validate_select(
@@ -184,14 +176,9 @@ def validate_select(
         for name in connection.get_table_names(sql, qualified=True)
     }
     # get_table_names omits system views (information_schema, pg_catalog, sqlite_master), so
-    # every base-table reference in the AST must also be a declared input or a local CTE.
-    ctes = _cte_names(tree)
-    for catalog, schema, table in _base_tables(tree):
-        if not catalog and not schema:
-            if table.lower() not in ctes:
-                referenced.add(table)
-        else:
-            referenced.add(".".join(part for part in (catalog, schema, table) if part))
+    # every base-table reference in the AST must also be a declared input or a CTE visible in
+    # the reference's own scope.
+    referenced |= _table_references(tree)
     undeclared = sorted(referenced - allowed)
     if undeclared:
         errors.append(

@@ -27,7 +27,11 @@ from ai_data_platform.agent_tools import (
 from ai_data_platform.api import build_vector_index
 from ai_data_platform.context import ContextService, DiscoveryMode
 from ai_data_platform.embeddings import HashingEmbeddingProvider
-from ai_data_platform.pipelines import load_pipeline_project, validate_pipeline_project
+from ai_data_platform.pipelines import (
+    PipelineValidationError,
+    load_pipeline_project,
+    validate_pipeline_project,
+)
 from ai_data_platform.pipelines.authoring import (
     DryRunResult,
     LineageNode,
@@ -268,16 +272,22 @@ def resolve_pipelines_path(registry_path: str | Path, explicit: str | Path | Non
     if configured:
         return Path(configured)
     project_root = Path(__file__).resolve().parents[3]
-    if Path(registry_path).resolve() == (project_root / "registry").resolve():
-        return project_root / "pipelines"
+    bundled = project_root / "pipelines"
+    if (
+        Path(registry_path).resolve() == (project_root / "registry").resolve()
+        and (bundled / "sources.yaml").is_file()
+    ):
+        return bundled
     return None
 
 
 def create_pipeline_authoring_service(
     registry, pipelines_path: Path, state_directory: Path
-) -> PipelineAuthoringService | None:
+) -> PipelineAuthoringService:
     if not (pipelines_path / "sources.yaml").is_file():
-        return None
+        raise PipelineValidationError(
+            [f"configured pipelines path {pipelines_path} has no sources.yaml"]
+        )
     project = load_pipeline_project(pipelines_path)
     validate_pipeline_project(project, registry)
     return PipelineAuthoringService(
