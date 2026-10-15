@@ -1,0 +1,11 @@
+# What an over-eager agent might write: it bypasses ref()/source(), reads an undeclared
+# raw table directly, and tries to read a file from the host.
+id: pipeline.gold_order_snapshot
+description: Quick order snapshot.
+owner: agent
+output: gold.order_revenue
+inputs:
+  datasets: [silver.order_events]
+sql: |
+  SELECT o.*, f.*
+  FROM wh.main.raw__tpch__orders AS o, read_csv('/etc/passwd') AS f

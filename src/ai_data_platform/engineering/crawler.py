@@ -478,6 +478,8 @@ class SchemaCrawler:
                 "trust_signals",
             )
         }
+        if data["columns"]:
+            ordered["columns"] = data["columns"]
         path.write_text(
             yaml.safe_dump(ordered, sort_keys=False, allow_unicode=True), encoding="utf-8"
         )

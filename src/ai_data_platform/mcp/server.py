@@ -27,6 +27,16 @@ from ai_data_platform.agent_tools import (
 from ai_data_platform.api import build_vector_index
 from ai_data_platform.context import ContextService, DiscoveryMode
 from ai_data_platform.embeddings import HashingEmbeddingProvider
+from ai_data_platform.pipelines import load_pipeline_project, validate_pipeline_project
+from ai_data_platform.pipelines.authoring import (
+    DryRunResult,
+    LineageNode,
+    PipelineAuthoringError,
+    PipelineAuthoringService,
+    PipelineInputCatalog,
+    ProposalSubmission,
+    ProposalValidation,
+)
 from ai_data_platform.registry.loader import load_registry
 from ai_data_platform.runtime import (
     DuckDBRuntimeHistoryStore,
@@ -41,30 +51,38 @@ READ_ONLY_ANNOTATIONS = ToolAnnotations(
     openWorldHint=False,
 )
 
+PROPOSAL_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=False,
+    idempotentHint=False,
+    openWorldHint=False,
+)
+
 ServerLifespan = Callable[[MCPServer], AbstractAsyncContextManager[object]]
 
 
 def _tool_call(function, *args, **kwargs):
     try:
         return function(*args, **kwargs)
-    except AgentToolError as error:
+    except (AgentToolError, PipelineAuthoringError) as error:
         raise ToolError(str(error)) from error
 
 
 def create_mcp_server(
     tool_service: AgentToolService,
     *,
+    pipeline_service: PipelineAuthoringService | None = None,
     lifespan: ServerLifespan | None = None,
 ) -> MCPServer:
-    """Register the stable agent capabilities as read-only MCP tools."""
+    """Register read-only context tools and, when configured, governed pipeline authoring."""
     server = MCPServer(
         name="ai-native-data-platform",
         title="AI-Native Data Platform Context Tools",
         description=(
-            "Governed, read-only access to semantic metadata, dataset discovery, "
-            "and runtime context."
+            "Governed access to semantic metadata, dataset discovery, runtime context, "
+            "and review-only pipeline authoring."
         ),
-        version="0.6.0",
+        version="0.7.0",
         lifespan=lifespan,
     )
 
@@ -166,12 +184,98 @@ def create_mcp_server(
     def validate_metadata_tool() -> MetadataValidationResult:
         return _tool_call(tool_service.validate_metadata)
 
+    if pipeline_service is not None:
+        _register_pipeline_tools(server, pipeline_service)
     return server
+
+
+SpecYaml = Annotated[str, Field(min_length=1, max_length=20_000)]
+ContractYaml = Annotated[str | None, Field(default=None, max_length=20_000)]
+
+
+def _register_pipeline_tools(server: MCPServer, service: PipelineAuthoringService) -> None:
+    @server.tool(
+        name="list_pipeline_inputs",
+        description=(
+            "List the sources and published datasets a pipeline may read, their columns and "
+            "template syntax, and the authoring rules."
+        ),
+        annotations=READ_ONLY_ANNOTATIONS,
+        structured_output=True,
+    )
+    def list_pipeline_inputs_tool() -> PipelineInputCatalog:
+        return _tool_call(service.list_inputs)
+
+    @server.tool(
+        name="get_dataset_lineage",
+        description="Return validated upstream and downstream lineage for one dataset.",
+        annotations=READ_ONLY_ANNOTATIONS,
+        structured_output=True,
+    )
+    def get_dataset_lineage_tool(dataset_id: Annotated[str, Field(min_length=1)]) -> LineageNode:
+        return _tool_call(service.lineage, dataset_id.strip())
+
+    @server.tool(
+        name="validate_pipeline_proposal",
+        description=(
+            "Statically validate a pipeline spec (YAML) and, for a new output, its proposed "
+            "dataset contract (YAML). Nothing is executed."
+        ),
+        annotations=READ_ONLY_ANNOTATIONS,
+        structured_output=True,
+    )
+    def validate_pipeline_proposal_tool(spec_yaml: SpecYaml, contract_yaml: ContractYaml = None) -> ProposalValidation:
+        return _tool_call(service.validate_proposal, spec_yaml, contract_yaml)
+
+    @server.tool(
+        name="dry_run_pipeline_proposal",
+        description=(
+            "Build the proposal in an isolated sandbox over a read-only DEV warehouse and run "
+            "contract, quality, and reconciliation gates. Nothing is published."
+        ),
+        annotations=READ_ONLY_ANNOTATIONS,
+        structured_output=True,
+    )
+    def dry_run_pipeline_proposal_tool(spec_yaml: SpecYaml, contract_yaml: ContractYaml = None) -> DryRunResult:
+        return _tool_call(service.dry_run, spec_yaml, contract_yaml)
+
+    @server.tool(
+        name="submit_pipeline_proposal",
+        description=(
+            "Queue a proposal for human review after a passing dry run. This never publishes "
+            "data or edits the repository; promotion is a reviewed pull request."
+        ),
+        annotations=PROPOSAL_ANNOTATIONS,
+        structured_output=True,
+    )
+    def submit_pipeline_proposal_tool(
+        spec_yaml: SpecYaml,
+        contract_yaml: ContractYaml = None,
+        rationale: Annotated[str, Field(max_length=2_000)] = "",
+    ) -> ProposalSubmission:
+        return _tool_call(service.submit_proposal, spec_yaml, contract_yaml, rationale)
+
+
+def create_pipeline_authoring_service(
+    registry, pipelines_path: Path, state_directory: Path
+) -> PipelineAuthoringService | None:
+    if not (pipelines_path / "sources.yaml").is_file():
+        return None
+    project = load_pipeline_project(pipelines_path)
+    validate_pipeline_project(project, registry)
+    return PipelineAuthoringService(
+        registry,
+        project,
+        state_directory / "engineering.duckdb",
+        state_directory / "pipeline_proposals",
+        temp_directory=state_directory / "duckdb_tmp",
+    )
 
 
 def create_mcp_server_from_paths(
     registry_path: str | Path,
     state_directory: str | Path,
+    pipelines_path: str | Path | None = None,
 ) -> MCPServer:
     registry_path = Path(registry_path)
     state_directory = Path(state_directory)
@@ -196,8 +300,14 @@ def create_mcp_server_from_paths(
             history_store.close()
             current_store.close()
 
+    pipeline_service = (
+        create_pipeline_authoring_service(registry, Path(pipelines_path), state_directory)
+        if pipelines_path is not None
+        else None
+    )
     return create_mcp_server(
         AgentToolService(context_service, registry_path),
+        pipeline_service=pipeline_service,
         lifespan=lifespan,
     )
 
@@ -208,7 +318,10 @@ def create_default_mcp_server() -> MCPServer:
         os.getenv("AI_DATA_PLATFORM_REGISTRY", str(project_root / "registry"))
     )
     state_directory = Path(os.getenv("AI_DATA_PLATFORM_STATE_DIR", "var"))
-    return create_mcp_server_from_paths(registry_path, state_directory)
+    pipelines_path = Path(
+        os.getenv("AI_DATA_PLATFORM_PIPELINES", str(project_root / "pipelines"))
+    )
+    return create_mcp_server_from_paths(registry_path, state_directory, pipelines_path)
 
 
 def main() -> None:

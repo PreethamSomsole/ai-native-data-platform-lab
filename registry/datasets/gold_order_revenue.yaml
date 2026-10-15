@@ -15,3 +15,13 @@ dimension_concept_ids: [business_concept.region, business_concept.product]
 freshness_sla: hourly within 90 minutes
 refresh_cadence: hourly
 trust_signals: [completed-order reconciliation, certified operations KPI]
+columns:
+  - {name: order_key, type: "BIGINT", nullable: false, description: "Completed order"}
+  - {name: line_number, type: "INTEGER", nullable: false, description: "Order line number"}
+  - {name: customer_key, type: "BIGINT", nullable: false, description: "Customer"}
+  - {name: part_key, type: "BIGINT", nullable: false, description: "Product"}
+  - {name: product_brand, type: "VARCHAR", nullable: false, description: "Product brand"}
+  - {name: sales_region, type: "VARCHAR", nullable: false, description: "Sales region"}
+  - {name: order_date, type: "DATE", nullable: false, description: "Order date"}
+  - {name: completed_date, type: "DATE", nullable: false, description: "Customer receipt date of the line"}
+  - {name: net_revenue, type: "DECIMAL(18,2)", nullable: false, description: "Completed-order net revenue"}

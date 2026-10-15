@@ -15,3 +15,14 @@ dimension_concept_ids: [business_concept.region]
 freshness_sla: event ingestion within 30 minutes
 refresh_cadence: streaming micro-batch
 trust_signals: [source event traceability]
+columns:
+  - {name: revenue_event_id, type: "VARCHAR", nullable: false, description: "Deterministic event identifier"}
+  - {name: event_type, type: "VARCHAR", nullable: false, description: "recognition or return_reversal"}
+  - {name: event_date, type: "DATE", nullable: false, description: "Recognition date (ship date) or reversal date (receipt date)"}
+  - {name: order_key, type: "BIGINT", nullable: false, description: "Source order identifier"}
+  - {name: line_number, type: "INTEGER", nullable: false, description: "Order line number"}
+  - {name: customer_key, type: "BIGINT", nullable: false, description: "Customer"}
+  - {name: product_brand, type: "VARCHAR", nullable: false, description: "Product brand"}
+  - {name: legal_entity, type: "VARCHAR", nullable: false, description: "Booking legal entity"}
+  - {name: sales_region, type: "VARCHAR", nullable: false, description: "Sales region"}
+  - {name: amount, type: "DECIMAL(18,2)", nullable: false, description: "Signed recognized amount; reversals are negative"}

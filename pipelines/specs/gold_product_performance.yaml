@@ -1,0 +1,23 @@
+id: pipeline.gold_product_performance
+description: Aggregate completed-order revenue by brand, region, and order month.
+owner: product analytics
+output: gold.product_performance
+inputs:
+  datasets: [gold.order_revenue]
+sql: |
+  SELECT
+      product_brand,
+      sales_region,
+      CAST(date_trunc('month', order_date) AS DATE) AS revenue_month,
+      CAST(SUM(net_revenue) AS DECIMAL(18, 2)) AS net_revenue,
+      COUNT(*) AS completed_line_count
+  FROM {{ ref('gold.order_revenue') }}
+  GROUP BY ALL
+quality_checks:
+  - {check: unique, columns: [product_brand, sales_region, revenue_month]}
+  - {check: range, column: net_revenue, min: 0}
+  - {check: row_count, min: 1}
+reconciliations:
+  - name: product revenue ties to completed-order revenue
+    expected_sql: SELECT SUM(net_revenue) FROM {{ ref('gold.order_revenue') }}
+    actual_sql: SELECT SUM(net_revenue) FROM {{ this }}

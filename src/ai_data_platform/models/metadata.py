@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class MetadataModel(BaseModel):
@@ -44,6 +44,20 @@ class Metric(MetadataModel):
     not_equivalent_to_ids: list[str] = Field(default_factory=list)
 
 
+class DatasetColumn(MetadataModel):
+    """Physical column promised by a dataset contract."""
+
+    name: str = Field(pattern=r"^[a-z_][a-z0-9_]*$", max_length=63)
+    type: str = Field(min_length=1, max_length=40)
+    nullable: bool = True
+    description: str = ""
+
+    @field_validator("type")
+    @classmethod
+    def normalize_type(cls, value: str) -> str:
+        return " ".join(value.upper().split()).replace(", ", ",")
+
+
 class Dataset(MetadataModel):
     id: str
     name: str
@@ -62,6 +76,16 @@ class Dataset(MetadataModel):
     freshness_sla: str
     refresh_cadence: str
     trust_signals: list[str] = Field(default_factory=list)
+    columns: list[DatasetColumn] = Field(default_factory=list)
+
+    @field_validator("columns")
+    @classmethod
+    def unique_column_names(cls, columns: list[DatasetColumn]) -> list[DatasetColumn]:
+        names = [column.name for column in columns]
+        duplicates = sorted({name for name in names if names.count(name) > 1})
+        if duplicates:
+            raise ValueError(f"duplicate column names: {', '.join(duplicates)}")
+        return columns
 
 
 class Registry(MetadataModel):

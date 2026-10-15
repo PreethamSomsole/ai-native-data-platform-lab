@@ -1,0 +1,25 @@
+id: pipeline.gold_customer_financial_summary
+description: Summarize recognized revenue and return reversals per customer and fiscal month.
+owner: customer analytics
+output: gold.customer_financial_summary
+inputs:
+  datasets: [silver.revenue_events]
+sql: |
+  SELECT
+      customer_key,
+      CAST(date_trunc('month', event_date) AS DATE) AS fiscal_month,
+      sales_region,
+      CAST(SUM(amount) AS DECIMAL(18, 2)) AS recognized_net_revenue,
+      CAST(COALESCE(SUM(amount) FILTER (WHERE event_type = 'return_reversal'), 0) AS DECIMAL(18, 2))
+          AS return_reversal_amount,
+      COUNT(*) AS revenue_event_count
+  FROM {{ ref('silver.revenue_events') }}
+  GROUP BY ALL
+quality_checks:
+  - {check: unique, columns: [customer_key, fiscal_month]}
+  - {check: range, column: return_reversal_amount, max: 0}
+  - {check: row_count, min: 1}
+reconciliations:
+  - name: customer totals tie to recognized revenue events
+    expected_sql: SELECT SUM(amount) FROM {{ ref('silver.revenue_events') }}
+    actual_sql: SELECT SUM(recognized_net_revenue) FROM {{ this }}

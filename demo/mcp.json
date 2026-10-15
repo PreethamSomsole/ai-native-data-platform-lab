@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "ai-native-data-platform": {
+      "command": "ai-data-platform-mcp",
+      "env": {
+        "AI_DATA_PLATFORM_STATE_DIR": "var"
+      }
+    }
+  }
+}

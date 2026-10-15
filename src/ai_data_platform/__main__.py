@@ -18,6 +18,7 @@ from ai_data_platform import (
 from ai_data_platform.embeddings import HashingEmbeddingProvider
 from ai_data_platform.engineering.crawler import SchemaCrawler, validate_crawler_drafts
 from ai_data_platform.evaluation import evaluate_retrieval, load_evaluation_cases
+from ai_data_platform.pipelines import cli as pipeline_cli
 
 
 def _default_registry_path() -> Path:
@@ -52,7 +53,7 @@ def main() -> int:
         "--state-dir", type=Path, default=Path("var"), help="SQLite and DuckDB directory."
     )
     mcp_parser = subparsers.add_parser(
-        "mcp", help="Run the read-only Model Context Protocol server over stdio."
+        "mcp", help="Run the governed Model Context Protocol server over stdio."
     )
     mcp_parser.add_argument(
         "--state-dir", type=Path, default=Path("var"), help="SQLite and DuckDB directory."
@@ -99,7 +100,12 @@ def main() -> int:
         required=True,
         help="Canonical registry supplying semantic references.",
     )
+    pipeline_cli.add_commands(subparsers)
     args = parser.parse_args()
+
+    handled = pipeline_cli.handle(args)
+    if handled is not None:
+        return handled
 
     if args.command == "crawl":
         source = args.source.resolve()
@@ -170,7 +176,9 @@ def main() -> int:
     if args.command == "mcp":
         from ai_data_platform.mcp import create_mcp_server_from_paths
 
-        server = create_mcp_server_from_paths(args.registry, args.state_dir)
+        server = create_mcp_server_from_paths(
+            args.registry, args.state_dir, Path(__file__).resolve().parents[2] / "pipelines"
+        )
         server.run(transport="stdio")
         return 0
     if args.mode == "hybrid":

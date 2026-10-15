@@ -3,7 +3,7 @@ name: Monthly sales bookings
 domain: sales
 layer: gold
 description: Certified monthly sales bookings trend dataset for sales leadership and pipeline review.
-grain: calendar month, sales region, and product
+grain: calendar month, sales region, and product brand
 target_users: [sales leadership, sales operations]
 supported_use_cases: [sales pipeline reporting, bookings trend analysis]
 prohibited_use_cases: [financial reporting, completed-order revenue]
@@ -15,3 +15,9 @@ dimension_concept_ids: [business_concept.region, business_concept.product]
 freshness_sla: daily by 07:00 UTC
 refresh_cadence: daily
 trust_signals: [sales operations certification]
+columns:
+  - {name: booking_month, type: "DATE", nullable: false, description: "First day of the order month"}
+  - {name: sales_region, type: "VARCHAR", nullable: false, description: "Sales region"}
+  - {name: product_brand, type: "VARCHAR", nullable: false, description: "Product brand"}
+  - {name: bookings_amount, type: "DECIMAL(18,2)", nullable: false, description: "Booked order value net of discount, any status"}
+  - {name: booked_order_count, type: "BIGINT", nullable: false, description: "Distinct booked orders"}

@@ -57,6 +57,22 @@ class EngineeringServiceTests(unittest.TestCase):
         self.assertEqual(plan.approval_requirement, ApprovalRequirement.REQUIRED)
         self.assertIn("dataset contract changes require approval", plan.approval_reasons)
 
+    def test_plan_uses_change_data_capture_when_the_source_provides_it(self) -> None:
+        from ai_data_platform.engineering import PipelinePlanRequest
+
+        with_cdc = self.service.generate_pipeline_plan(
+            PipelinePlanRequest(
+                pipeline_name="orders",
+                source_kind=SourceKind.DATABASE,
+                change_data_available=True,
+            )
+        )
+        without_cdc = self.service.generate_pipeline_plan(
+            PipelinePlanRequest(pipeline_name="orders", source_kind=SourceKind.DATABASE)
+        )
+        self.assertIn("log_based_cdc", with_cdc.steps[0])
+        self.assertIn("incremental_watermark_batch", without_cdc.steps[0])
+
     def test_contract_validation_rejects_unknown_semantic_reference(self) -> None:
         dataset = self.service.registry.datasets["gold.finance_revenue"].model_copy(
             update={

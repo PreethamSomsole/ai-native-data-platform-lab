@@ -20,7 +20,7 @@ jobs:
       - name: Install package and lint tool
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[test]"
+          python -m pip install -e ".[test,data,dbt]"
           python -m pip install ruff==0.16.8
 
       - name: Validate semantic registry
@@ -28,6 +28,16 @@ jobs:
 
       - name: Run tests
         run: python -m unittest discover -s tests -v
+
+      - name: Validate pipeline specs
+        run: python -m ai_data_platform pipelines validate
+
+      - name: Pipeline and dbt smoke test (TPC-H scale 0.01)
+        run: |
+          python -m ai_data_platform sample-data tpch --scale 0.01 --data-dir "$RUNNER_TEMP/data"
+          python -m ai_data_platform pipelines --state-dir "$RUNNER_TEMP/state" --data-dir "$RUNNER_TEMP/data" run --ingest
+          python -m ai_data_platform pipelines --state-dir "$RUNNER_TEMP/state" export-dbt --output "$RUNNER_TEMP/dbt"
+          dbt build --project-dir "$RUNNER_TEMP/dbt" --profiles-dir "$RUNNER_TEMP/dbt"
 
       - name: Lint
         run: ruff check .

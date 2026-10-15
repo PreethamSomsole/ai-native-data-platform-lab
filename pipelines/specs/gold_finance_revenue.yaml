@@ -1,0 +1,26 @@
+id: pipeline.gold_finance_revenue
+description: Aggregate recognized revenue events by fiscal quarter, legal entity, region, and brand.
+owner: finance analytics
+output: gold.finance_revenue
+inputs:
+  datasets: [silver.revenue_events]
+sql: |
+  SELECT
+      strftime(event_date, '%Y') || '-Q' || CAST(quarter(event_date) AS VARCHAR) AS fiscal_quarter,
+      legal_entity,
+      sales_region,
+      product_brand,
+      CAST(SUM(amount) AS DECIMAL(18, 2)) AS recognized_net_revenue,
+      COUNT(*) AS revenue_event_count
+  FROM {{ ref('silver.revenue_events') }}
+  GROUP BY ALL
+quality_checks:
+  - {check: unique, columns: [fiscal_quarter, legal_entity, sales_region, product_brand]}
+  - {check: row_count, min: 1}
+reconciliations:
+  - name: quarterly totals tie to recognized revenue events
+    expected_sql: SELECT SUM(amount) FROM {{ ref('silver.revenue_events') }}
+    actual_sql: SELECT SUM(recognized_net_revenue) FROM {{ this }}
+  - name: every revenue event is counted once
+    expected_sql: SELECT COUNT(*) FROM {{ ref('silver.revenue_events') }}
+    actual_sql: SELECT SUM(revenue_event_count) FROM {{ this }}

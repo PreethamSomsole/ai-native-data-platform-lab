@@ -15,3 +15,10 @@ dimension_concept_ids: [business_concept.region]
 freshness_sla: daily by 09:00 UTC
 refresh_cadence: daily
 trust_signals: [certified customer financial calculation]
+columns:
+  - {name: customer_key, type: "BIGINT", nullable: false, description: "Customer"}
+  - {name: fiscal_month, type: "DATE", nullable: false, description: "First day of the fiscal month"}
+  - {name: sales_region, type: "VARCHAR", nullable: false, description: "Customer sales region"}
+  - {name: recognized_net_revenue, type: "DECIMAL(18,2)", nullable: false, description: "Recognized revenue net of reversals"}
+  - {name: return_reversal_amount, type: "DECIMAL(18,2)", nullable: false, description: "Total of return reversals (zero or negative)"}
+  - {name: revenue_event_count, type: "BIGINT", nullable: false, description: "Revenue events in the month"}
