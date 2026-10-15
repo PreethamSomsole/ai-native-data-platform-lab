@@ -172,6 +172,7 @@ class SqlSafetyTests(unittest.TestCase):
             "WITH leak AS (SELECT * FROM sqlite_master), sqlite_master AS (SELECT 1) SELECT * FROM leak":
                 "shadow existing relations",
             "SELECT * FROM pg_class": "not declared inputs",
+            "WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r) SELECT * FROM r": "recursive",
         }
         for sql, message in unsafe.items():
             with self.subTest(sql=sql), self.assertRaisesRegex(PipelineSqlError, message):
@@ -456,6 +457,41 @@ class AuthoringTests(PipelineHarness):
             submitted.proposal_id,
             [record.get("proposal_id") for record in records if record["action"] == "submit_pipeline_proposal"],
         )
+
+    def _segment_proposal(self, sql: str, columns: list[dict]) -> tuple[str, str]:
+        spec = yaml.safe_load(self.spec)
+        spec.update({"sql": sql, "quality_checks": [], "reconciliations": []})
+        contract = yaml.safe_load(self.contract)
+        contract["columns"] = columns
+        return yaml.safe_dump(spec), yaml.safe_dump(contract)
+
+    def test_dry_runs_are_interrupted_at_the_time_limit(self) -> None:
+        # Nine self-joins of six fixture lines is ~10M rows: seconds of work, unless interrupted.
+        joins = ", ".join(f"{{{{ source('tpch', 'lineitem') }}}} AS l{index}" for index in range(9))
+        spec, contract = self._segment_proposal(
+            f"SELECT l0.l_returnflag AS market_segment FROM {joins}",
+            [{"name": "market_segment", "type": "VARCHAR", "nullable": False}],
+        )
+        raw = yaml.safe_load(spec)
+        raw["inputs"] = {"sources": ["tpch.lineitem"]}
+        self.service.dry_run_timeout_seconds = 0.2
+        result = self.service.dry_run(yaml.safe_dump(raw), contract)
+        self.assertFalse(result.passed)
+        self.assertIn("time limit", result.message)
+
+    def test_binary_preview_values_serialize(self) -> None:
+        spec, contract = self._segment_proposal(
+            "SELECT from_hex('ff') AS payload, r_name AS region FROM {{ source('tpch', 'region') }}",
+            [{"name": "payload", "type": "BLOB", "nullable": False}, {"name": "region", "type": "VARCHAR"}],
+        )
+        raw = yaml.safe_load(spec)
+        raw["inputs"] = {"sources": ["tpch.region"]}
+        spec = yaml.safe_dump(raw)
+        result = self.service.dry_run(spec, contract)
+        self.assertTrue(result.passed, result.message)
+        self.assertEqual(result.preview[0]["payload"], "0xff")
+        result.model_dump_json()
+        self.assertEqual(self.service.submit_proposal(spec, contract).status, "approval_required")
 
     def test_lineage_lists_upstream_and_downstream(self) -> None:
         node = self.service.lineage("silver.revenue_events")

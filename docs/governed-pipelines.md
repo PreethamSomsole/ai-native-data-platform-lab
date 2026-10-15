@@ -84,7 +84,8 @@ Transform SQL is untrusted input, whether a person or an agent wrote it:
    base-table reference, including system views such as `information_schema` and
    `sqlite_master`, must be a declared input or a CTE. CTE names may not shadow any relation
    that already resolves, so an unqualified name can only ever mean a CTE, regardless of
-   scope or declaration order. All violations are reported together.
+   scope or declaration order. Recursive CTEs are rejected because they can run without
+   bound. All violations are reported together.
 3. **Sandboxed execution.** SQL runs on an in-memory DuckDB connection with the warehouse
    attached. Before user SQL runs, `enable_external_access` is turned off and
    `lock_configuration` is set, so files cannot be read, databases cannot be attached, and
@@ -131,7 +132,7 @@ When `pipelines/sources.yaml` is configured, the MCP server adds five tools:
 | `list_pipeline_inputs` | Sources and published datasets, columns, templates, and rules (read-only) |
 | `get_dataset_lineage` | Validated upstream and downstream lineage (read-only) |
 | `validate_pipeline_proposal` | Static validation of spec and proposed contract YAML (read-only) |
-| `dry_run_pipeline_proposal` | Full build and gates in a sandbox over a **read-only** warehouse attach; returns schema, checks, and a 5-row preview (read-only) |
+| `dry_run_pipeline_proposal` | Full build and gates in a sandbox over a **read-only** warehouse attach, bounded by a 120 s deadline, 2 GB of memory, and 4 GB of temp disk; returns schema, checks, and a 5-row preview (read-only) |
 | `submit_pipeline_proposal` | Re-runs the dry run and, only if it passes, writes a review package (`pipeline.yaml`, `contract.yaml`, `review.json`) to `var/pipeline_proposals/` (not read-only, not destructive) |
 
 Agents cannot publish, change a governed contract, certify a dataset (proposed contracts must

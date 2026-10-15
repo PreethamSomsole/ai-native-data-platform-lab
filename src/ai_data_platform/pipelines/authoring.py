@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 from collections.abc import Callable
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -118,11 +119,20 @@ class PipelineAuthoringError(ValueError):
 
 
 def _json_safe(value: Any) -> Any:
+    """Normalize preview values (including BLOB, LIST, STRUCT, and MAP) for JSON transport."""
+    if value is None or isinstance(value, bool | int | float | str):
+        return value
+    if isinstance(value, bytes | bytearray | memoryview):
+        return "0x" + bytes(value).hex()
     if isinstance(value, Decimal):
         return str(value)
-    if isinstance(value, datetime | date):
+    if isinstance(value, datetime | date | time):
         return value.isoformat()
-    return value
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list | tuple | set):
+        return [_json_safe(item) for item in value]
+    return str(value)
 
 
 class PipelineAuthoringService:
@@ -135,6 +145,8 @@ class PipelineAuthoringService:
         *,
         temp_directory: str | Path,
         memory_limit: str | None = "2GB",
+        max_temp_directory_size: str | None = "4GB",
+        dry_run_timeout_seconds: float = 120.0,
         preview_rows: int = 5,
         audit: Callable[..., None] | None = None,
     ) -> None:
@@ -144,6 +156,8 @@ class PipelineAuthoringService:
         self.proposals_directory = Path(proposals_directory)
         self.temp_directory = Path(temp_directory)
         self.memory_limit = memory_limit
+        self.max_temp_directory_size = max_temp_directory_size
+        self.dry_run_timeout_seconds = dry_run_timeout_seconds
         self.preview_rows = preview_rows
         self.audit = audit
 
@@ -158,6 +172,7 @@ class PipelineAuthoringService:
                 read_only=True,
                 temp_directory=self.temp_directory,
                 memory_limit=self.memory_limit,
+                max_temp_directory_size=self.max_temp_directory_size,
             )
         except duckdb.IOException as error:
             raise PipelineAuthoringError(
@@ -341,18 +356,29 @@ class PipelineAuthoringService:
                     message=f"inputs are not published in the DEV warehouse: {', '.join(missing)}",
                 )
             candidate = qualified("agent_candidate", catalog="memory")
+            # Untrusted SQL gets a wall-clock deadline (plus memory and temp-disk caps).
+            deadline = threading.Timer(self.dry_run_timeout_seconds, connection.interrupt)
+            deadline.start()
             try:
                 outcome = build_candidate(connection, spec, contract, candidate)
+                preview: list[dict[str, Any]] = []
+                if not outcome.contract_errors and self.preview_rows:
+                    cursor = connection.execute(f"SELECT * FROM {candidate} LIMIT {int(self.preview_rows)}")
+                    names = [item[0] for item in cursor.description]
+                    preview = [
+                        {name: _json_safe(value) for name, value in zip(names, row, strict=True)}
+                        for row in cursor.fetchall()
+                    ]
+            except duckdb.InterruptException:
+                return DryRunResult(
+                    passed=False,
+                    validation=validation,
+                    message=f"dry run exceeded the {self.dry_run_timeout_seconds:g}s time limit and was interrupted",
+                )
             except (PipelineSqlError, ValueError, duckdb.Error) as error:
                 return DryRunResult(passed=False, validation=validation, message=f"execution failed: {error}")
-            preview: list[dict[str, Any]] = []
-            if not outcome.contract_errors and self.preview_rows:
-                cursor = connection.execute(f"SELECT * FROM {candidate} LIMIT {int(self.preview_rows)}")
-                names = [item[0] for item in cursor.description]
-                preview = [
-                    {name: _json_safe(value) for name, value in zip(names, row, strict=True)}
-                    for row in cursor.fetchall()
-                ]
+            finally:
+                deadline.cancel()
         finally:
             connection.close()
         return DryRunResult(

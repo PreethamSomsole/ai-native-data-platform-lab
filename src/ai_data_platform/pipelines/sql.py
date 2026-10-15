@@ -120,6 +120,16 @@ def _table_functions(node: object) -> list[str]:
     return found
 
 
+def _contains_node_type(node: object, node_type: str) -> bool:
+    if isinstance(node, dict):
+        return node.get("type") == node_type or any(
+            _contains_node_type(value, node_type) for value in node.values()
+        )
+    if isinstance(node, list):
+        return any(_contains_node_type(value, node_type) for value in node)
+    return False
+
+
 def _base_tables(node: object) -> list[tuple[str, str, str]]:
     found: list[tuple[str, str, str]] = []
     if isinstance(node, dict):
@@ -182,6 +192,8 @@ def validate_select(
     if tree.get("error"):
         raise PipelineSqlError([f"SQL does not parse: {tree.get('error_message', 'unknown error')}"])
     errors: list[str] = []
+    if _contains_node_type(tree, "RECURSIVE_CTE_NODE"):
+        errors.append("recursive CTEs are not allowed (they can run without bound)")
     functions = sorted(set(_table_functions(tree)))
     if functions:
         errors.append(f"table functions are not allowed: {', '.join(functions)}")
@@ -227,6 +239,7 @@ def sandboxed_connection(
     read_only: bool,
     temp_directory: str | Path,
     memory_limit: str | None = None,
+    max_temp_directory_size: str | None = None,
 ) -> duckdb.DuckDBPyConnection:
     """In-memory DuckDB with the warehouse attached as ``wh`` and file access locked off."""
     Path(temp_directory).mkdir(parents=True, exist_ok=True)
@@ -237,6 +250,8 @@ def sandboxed_connection(
         connection.execute(f"SET temp_directory = {_literal(str(temp_directory))}")
         if memory_limit is not None:
             connection.execute(f"SET memory_limit = {_literal(memory_limit)}")
+        if max_temp_directory_size is not None:
+            connection.execute(f"SET max_temp_directory_size = {_literal(max_temp_directory_size)}")
         connection.execute("SET enable_progress_bar = false")
         connection.execute("SET enable_external_access = false")
         connection.execute("SET lock_configuration = true")
