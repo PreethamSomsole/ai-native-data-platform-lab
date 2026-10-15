@@ -7,8 +7,7 @@ from pathlib import Path
 import duckdb
 import yaml
 
-from ai_data_platform.engineering.crawler import SchemaCrawler
-from ai_data_platform.engineering.crawler import validate_crawler_drafts
+from ai_data_platform.engineering.crawler import SchemaCrawler, validate_crawler_drafts
 from ai_data_platform.validation import RegistryValidationError
 
 

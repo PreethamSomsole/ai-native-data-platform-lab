@@ -16,8 +16,8 @@ from ai_data_platform import (
     load_registry,
 )
 from ai_data_platform.embeddings import HashingEmbeddingProvider
-from ai_data_platform.evaluation import evaluate_retrieval, load_evaluation_cases
 from ai_data_platform.engineering.crawler import SchemaCrawler, validate_crawler_drafts
+from ai_data_platform.evaluation import evaluate_retrieval, load_evaluation_cases
 
 
 def _default_registry_path() -> Path:

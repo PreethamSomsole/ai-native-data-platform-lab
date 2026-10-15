@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import argparse
+import json
 import random
 from datetime import UTC, datetime, timedelta
 from pathlib import Path

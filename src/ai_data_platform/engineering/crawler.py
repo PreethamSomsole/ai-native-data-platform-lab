@@ -16,7 +16,6 @@ from ai_data_platform.models import Certification, Dataset
 from ai_data_platform.registry import load_registry
 from ai_data_platform.validation import RegistryValidationError, validate_registry
 
-
 _LAYERS = ("gold", "silver", "bronze", "raw")
 _DOMAIN_ALIASES = {
     "customer": "customer",
