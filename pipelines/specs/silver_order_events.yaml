@@ -1,0 +1,45 @@
+id: pipeline.silver_order_events
+description: Conform TPC-H order lines with order, customer, product, and geography attributes.
+owner: order data engineering
+output: silver.order_events
+inputs:
+  sources: [tpch.lineitem, tpch.orders, tpch.customer, tpch.part, tpch.nation, tpch.region]
+sql: |
+  SELECT
+      l.l_orderkey AS order_key,
+      l.l_linenumber AS line_number,
+      o.o_custkey AS customer_key,
+      l.l_partkey AS part_key,
+      p.p_brand AS product_brand,
+      n.n_name AS legal_entity,
+      r.r_name AS sales_region,
+      o.o_orderdate AS order_date,
+      l.l_shipdate AS ship_date,
+      l.l_receiptdate AS receipt_date,
+      o.o_orderstatus AS order_status,
+      l.l_linestatus AS line_status,
+      l.l_returnflag AS return_flag,
+      l.l_quantity AS quantity,
+      CAST(l.l_extendedprice * (1 - l.l_discount) AS DECIMAL(18, 2)) AS net_amount
+  FROM {{ source('tpch', 'lineitem') }} AS l
+  JOIN {{ source('tpch', 'orders') }} AS o ON o.o_orderkey = l.l_orderkey
+  JOIN {{ source('tpch', 'customer') }} AS c ON c.c_custkey = o.o_custkey
+  JOIN {{ source('tpch', 'part') }} AS p ON p.p_partkey = l.l_partkey
+  JOIN {{ source('tpch', 'nation') }} AS n ON n.n_nationkey = c.c_nationkey
+  JOIN {{ source('tpch', 'region') }} AS r ON r.r_regionkey = n.n_regionkey
+quality_checks:
+  - {check: unique, columns: [order_key, line_number]}
+  - {check: accepted_values, column: order_status, values: [F, O, P]}
+  - {check: accepted_values, column: line_status, values: [F, O]}
+  - {check: accepted_values, column: return_flag, values: [A, N, R]}
+  - {check: range, column: net_amount, min: 0}
+  - {check: row_count, min: 1}
+reconciliations:
+  - name: every source order line is conformed (no orphans dropped by joins)
+    expected_sql: SELECT COUNT(*) FROM {{ source('tpch', 'lineitem') }}
+    actual_sql: SELECT COUNT(*) FROM {{ this }}
+  - name: net amount ties out to the source
+    expected_sql: |
+      SELECT SUM(CAST(l_extendedprice * (1 - l_discount) AS DECIMAL(18, 2)))
+      FROM {{ source('tpch', 'lineitem') }}
+    actual_sql: SELECT SUM(net_amount) FROM {{ this }}

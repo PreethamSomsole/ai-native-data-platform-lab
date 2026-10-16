@@ -15,3 +15,19 @@ dimension_concept_ids: [business_concept.region]
 freshness_sla: event ingestion within 30 minutes
 refresh_cadence: streaming micro-batch
 trust_signals: [source event traceability]
+columns:
+  - {name: order_key, type: "BIGINT", nullable: false, description: "Source order identifier"}
+  - {name: line_number, type: "INTEGER", nullable: false, description: "Order line number within the order"}
+  - {name: customer_key, type: "BIGINT", nullable: false, description: "Ordering customer"}
+  - {name: part_key, type: "BIGINT", nullable: false, description: "Ordered product"}
+  - {name: product_brand, type: "VARCHAR", nullable: false, description: "Product brand"}
+  - {name: legal_entity, type: "VARCHAR", nullable: false, description: "Customer nation, used as the booking legal entity"}
+  - {name: sales_region, type: "VARCHAR", nullable: false, description: "Customer sales region"}
+  - {name: order_date, type: "DATE", nullable: false, description: "Date the order was placed"}
+  - {name: ship_date, type: "DATE", nullable: false, description: "Date the line shipped"}
+  - {name: receipt_date, type: "DATE", nullable: false, description: "Date the customer received the line"}
+  - {name: order_status, type: "VARCHAR", nullable: false, description: "Order status: F fulfilled, O open, P partially fulfilled"}
+  - {name: line_status, type: "VARCHAR", nullable: false, description: "Line status: F shipped, O not yet shipped"}
+  - {name: return_flag, type: "VARCHAR", nullable: false, description: "Return flag: R returned, A accepted, N not yet received"}
+  - {name: quantity, type: "DECIMAL(15,2)", nullable: false, description: "Ordered quantity"}
+  - {name: net_amount, type: "DECIMAL(18,2)", nullable: false, description: "Extended price net of discount, excluding tax"}

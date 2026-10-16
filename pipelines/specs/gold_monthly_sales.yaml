@@ -1,0 +1,23 @@
+id: pipeline.gold_monthly_sales
+description: Aggregate booked order value (any status) by order month, region, and brand.
+owner: sales analytics
+output: gold.monthly_sales
+inputs:
+  datasets: [silver.order_events]
+sql: |
+  SELECT
+      CAST(date_trunc('month', order_date) AS DATE) AS booking_month,
+      sales_region,
+      product_brand,
+      CAST(SUM(net_amount) AS DECIMAL(18, 2)) AS bookings_amount,
+      COUNT(DISTINCT order_key) AS booked_order_count
+  FROM {{ ref('silver.order_events') }}
+  GROUP BY ALL
+quality_checks:
+  - {check: unique, columns: [booking_month, sales_region, product_brand]}
+  - {check: range, column: bookings_amount, min: 0}
+  - {check: row_count, min: 1}
+reconciliations:
+  - name: bookings tie to conformed order lines
+    expected_sql: SELECT SUM(net_amount) FROM {{ ref('silver.order_events') }}
+    actual_sql: SELECT SUM(bookings_amount) FROM {{ this }}

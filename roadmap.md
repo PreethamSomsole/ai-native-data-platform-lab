@@ -273,6 +273,28 @@ demonstration that validates one corrected contract, stages it in an isolated re
 discovers it through the existing platform. Agent tools must not gain crawler filesystem,
 SQL, source-write, or promotion authority as part of this M6 addition.
 
+## Milestone 6b — Governed pipelines on real data
+
+Status: local DEV reference implementation complete on TPC-H (scale factor 1, 6M order lines).
+
+Reference implementation:
+- column contracts on dataset definitions
+- declarative pipeline specs (`pipelines/`) for all seven registry datasets
+- templates-only relation naming, SELECT-only static analysis, and a locked DuckDB sandbox
+- contract, quality, and reconciliation gates before an atomic publish with one retained backup
+- runtime observations, verified lineage, run history, and audit events from every run
+- agent proposal tools over MCP: inspect, validate, read-only dry run, and review-only submit
+- compilation to a contract-enforced dbt project that passes `dbt build`
+- TPC-H generation and an NYC taxi downloader
+- a live showcase script with presenter notes
+
+Next:
+- NYC taxi pipelines written against the inspected real schema (and its cross-year type drift)
+- incremental models and late-arriving data windows driven by `recommend_ingestion_pattern()`
+- statistical anomaly checks from runtime history
+- a dbt `run_results.json` adapter that produces runtime observations
+- contract-change classification (additive nullable vs breaking) as an approval policy
+
 ## Milestone 7 — Snowflake mapping
 
 Map the vendor-neutral architecture onto Snowflake capabilities.

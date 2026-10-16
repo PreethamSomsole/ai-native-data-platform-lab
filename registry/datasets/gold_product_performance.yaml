@@ -3,7 +3,7 @@ name: Product performance
 domain: product
 layer: gold
 description: Certified product and region performance dataset based on completed-order revenue.
-grain: product, sales region, and calendar month
+grain: product brand, sales region, and calendar month
 target_users: [product managers, sales operations]
 supported_use_cases: [product performance analysis, regional sales analysis]
 prohibited_use_cases: [financial reporting]
@@ -15,3 +15,9 @@ dimension_concept_ids: [business_concept.region, business_concept.product]
 freshness_sla: daily by 10:00 UTC
 refresh_cadence: daily
 trust_signals: [certified product KPI]
+columns:
+  - {name: product_brand, type: "VARCHAR", nullable: false, description: "Product brand"}
+  - {name: sales_region, type: "VARCHAR", nullable: false, description: "Sales region"}
+  - {name: revenue_month, type: "DATE", nullable: false, description: "First day of the order month"}
+  - {name: net_revenue, type: "DECIMAL(18,2)", nullable: false, description: "Completed-order net revenue"}
+  - {name: completed_line_count, type: "BIGINT", nullable: false, description: "Completed order lines"}

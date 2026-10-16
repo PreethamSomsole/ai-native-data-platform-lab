@@ -1,0 +1,22 @@
+id: gold.customer_segment_revenue
+name: Customer segment revenue
+domain: customer
+layer: gold
+description: Recognized net revenue by customer market segment and fiscal quarter, proposed by an engineering agent.
+grain: customer market segment and fiscal quarter
+target_users: [customer strategy, finance analysts]
+supported_use_cases: [customer segment analysis]
+prohibited_use_cases: [external financial reporting]
+certification: uncertified
+owner: customer analytics
+metric_ids: [metric.finance_net_revenue]
+entity_ids: [entity.customer]
+dimension_concept_ids: []
+freshness_sla: daily by 09:00 UTC
+refresh_cadence: daily
+trust_signals: [agent-proposed, reconciled in dry run]
+columns:
+  - {name: market_segment, type: VARCHAR, nullable: false, description: "Customer market segment"}
+  - {name: fiscal_quarter, type: VARCHAR, nullable: false, description: "Fiscal quarter as YYYY-Qn"}
+  - {name: recognized_net_revenue, type: "DECIMAL(18,2)", nullable: false, description: "Recognized revenue net of reversals"}
+  - {name: customer_count, type: BIGINT, nullable: false, description: "Distinct customers with revenue events"}

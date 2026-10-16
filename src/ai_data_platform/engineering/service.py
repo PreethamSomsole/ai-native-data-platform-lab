@@ -39,6 +39,13 @@ _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _ALLOWED_ARTIFACT_SUFFIXES = {".py", ".sql", ".yaml", ".yml"}
 
 
+def append_audit_record(path: Path, action: str, **details: object) -> None:
+    """Append one JSONL audit record; shared by every state-changing platform capability."""
+    entry = {"observed_at": datetime.now(tz=UTC).isoformat(), "action": action, **details}
+    with path.open("a", encoding="utf-8") as audit_file:
+        audit_file.write(json.dumps(entry, sort_keys=True) + "\n")
+
+
 class EngineeringToolError(ValueError):
     """Stable failure for callers and future protocol adapters."""
 
@@ -108,11 +115,14 @@ class EngineeringService:
 
     @staticmethod
     def _backup_name(table_name: str, purpose: str) -> str:
-        timestamp = datetime.now(tz=UTC).strftime("%Y%m%d%H%M%S")
+        # Microseconds keep lexicographic order equal to creation order for pruning.
+        timestamp = datetime.now(tz=UTC).strftime("%Y%m%d%H%M%S%f")
         return f"{table_name}__{purpose}__{timestamp}_{uuid4().hex[:8]}"
 
     def _connect(self) -> duckdb.DuckDBPyConnection:
-        return duckdb.connect(str(self.database_path))
+        connection = duckdb.connect(str(self.database_path))
+        connection.execute("SET enable_progress_bar = false")
+        return connection
 
     def _copy_table_with_schema(
         self,
@@ -174,9 +184,7 @@ class EngineeringService:
             connection.execute(rewritten_index_sql)
 
     def _audit(self, action: str, **details: object) -> None:
-        entry = {"observed_at": datetime.now(tz=UTC).isoformat(), "action": action, **details}
-        with self.audit_path.open("a", encoding="utf-8") as audit_file:
-            audit_file.write(json.dumps(entry, sort_keys=True) + "\n")
+        append_audit_record(self.audit_path, action, **details)
 
     def recommend_ingestion_pattern(self, request: IngestionRequest) -> IngestionRecommendation:
         if request.source_kind is SourceKind.STREAM:
@@ -213,6 +221,7 @@ class EngineeringService:
         recommendation = self.recommend_ingestion_pattern(
             IngestionRequest(
                 source_kind=request.source_kind,
+                change_data_available=request.change_data_available,
                 expected_latency_minutes=60,
             )
         )
@@ -424,6 +433,85 @@ class EngineeringService:
             approval_requirement=requirement,
             message="Replacement completed atomically; use the backup table for deterministic rollback.",
         )
+
+    def record_audit_event(self, action: str, **details: object) -> None:
+        """Append a platform-authored audit record (for example, pipeline ingestion)."""
+        self._audit(action, **details)
+
+    def publish_new_table(self, request: SafeReplaceRequest) -> SafeReplaceResult:
+        """First publication of a validated staging table; there is nothing to back up."""
+        target = self._quote_identifier(request.target_table)
+        replacement = self._quote_identifier(request.replacement_table)
+        if request.environment is not Environment.DEVELOPMENT or not self.allow_development_writes:
+            return SafeReplaceResult(
+                status=ToolStatus.APPROVAL_REQUIRED,
+                target_table=request.target_table,
+                replacement_table=request.replacement_table,
+                approval_requirement=ApprovalRequirement.REQUIRED,
+                message="only enabled local DEVELOPMENT writes are executable",
+            )
+        connection = self._connect()
+        try:
+            if self._table_exists(connection, request.target_table):
+                raise EngineeringToolError(
+                    "CONFLICT",
+                    f"table '{request.target_table}' already exists; use safe_replace_table",
+                )
+            if not self._table_exists(connection, request.replacement_table):
+                raise EngineeringToolError(
+                    "NOT_FOUND", f"table '{request.replacement_table}' was not found"
+                )
+            rows = connection.execute(f"SELECT COUNT(*) FROM {replacement}").fetchone()[0]
+            connection.execute(f"ALTER TABLE {replacement} RENAME TO {target}")
+        finally:
+            connection.close()
+        self._audit(
+            "publish_new_table",
+            target_table=request.target_table,
+            replacement_table=request.replacement_table,
+            status=ToolStatus.SUCCEEDED.value,
+        )
+        return SafeReplaceResult(
+            status=ToolStatus.SUCCEEDED,
+            target_table=request.target_table,
+            replacement_table=request.replacement_table,
+            rows_replaced=rows,
+            approval_requirement=ApprovalRequirement.NOT_REQUIRED,
+            message="Initial publication completed.",
+        )
+
+    def prune_backups(
+        self, table_name: str, *, keep: int = 1, preserve: str | None = None
+    ) -> list[str]:
+        """Drop all but the newest ``keep`` safe-replace backups of one DEV table.
+
+        ``preserve`` (normally the backup returned by the latest replacement) is always kept.
+        """
+        self._quote_identifier(table_name)
+        if keep < 1:
+            raise EngineeringToolError("INVALID_ARGUMENT", "keep must be at least 1")
+        if not self.allow_development_writes:
+            return []
+        prefix = f"{table_name}__backup__"
+        connection = self._connect()
+        try:
+            backups = sorted(
+                name
+                for (name,) in connection.execute(
+                    "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+                ).fetchall()
+                if name.startswith(prefix)
+            )
+            kept = [preserve] if preserve in backups else []
+            kept += [name for name in reversed(backups) if name != preserve][: keep - len(kept)]
+            dropped = [name for name in backups if name not in kept]
+            for name in dropped:
+                connection.execute(f"DROP TABLE {self._quote_identifier(name)}")
+        finally:
+            connection.close()
+        if dropped:
+            self._audit("prune_backups", target_table=table_name, dropped=dropped, kept=keep)
+        return dropped
 
     def restore_table_from_backup(self, request: RestoreTableRequest) -> SafeReplaceResult:
         target = self._quote_identifier(request.target_table)

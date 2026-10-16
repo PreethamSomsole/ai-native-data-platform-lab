@@ -1,0 +1,37 @@
+id: pipeline.silver_revenue_events
+description: >-
+  Apply the Finance recognition policy: recognize shipped lines on ship date and reverse
+  returned lines on receipt date.
+owner: finance data engineering
+output: silver.revenue_events
+inputs:
+  datasets: [silver.order_events]
+sql: |
+  SELECT
+      'rec-' || order_key || '-' || line_number AS revenue_event_id,
+      'recognition' AS event_type,
+      ship_date AS event_date,
+      order_key, line_number, customer_key, product_brand, legal_entity, sales_region,
+      net_amount AS amount
+  FROM {{ ref('silver.order_events') }}
+  WHERE line_status = 'F'
+  UNION ALL
+  SELECT
+      'rev-' || order_key || '-' || line_number AS revenue_event_id,
+      'return_reversal' AS event_type,
+      receipt_date AS event_date,
+      order_key, line_number, customer_key, product_brand, legal_entity, sales_region,
+      -net_amount AS amount
+  FROM {{ ref('silver.order_events') }}
+  WHERE line_status = 'F' AND return_flag = 'R'
+quality_checks:
+  - {check: unique, columns: [revenue_event_id]}
+  - {check: accepted_values, column: event_type, values: [recognition, return_reversal]}
+  - {check: row_count, min: 1}
+reconciliations:
+  - name: recognized revenue equals shipped, non-returned net amount
+    expected_sql: |
+      SELECT SUM(CASE WHEN return_flag = 'R' THEN 0 ELSE net_amount END)
+      FROM {{ ref('silver.order_events') }}
+      WHERE line_status = 'F'
+    actual_sql: SELECT SUM(amount) FROM {{ this }}

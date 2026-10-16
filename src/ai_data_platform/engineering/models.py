@@ -54,6 +54,7 @@ class PipelinePlanRequest(EngineeringModel):
     pipeline_name: str = Field(min_length=1, max_length=100)
     environment: Environment = Environment.DEVELOPMENT
     source_kind: SourceKind
+    change_data_available: bool = False
     dataset_id: str | None = None
     changes_dataset_contract: bool = False
     changes_architecture: bool = False

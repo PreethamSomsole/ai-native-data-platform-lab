@@ -3,6 +3,7 @@ from ai_data_platform.models.metadata import (
     BusinessEntity,
     Certification,
     Dataset,
+    DatasetColumn,
     Metric,
     Registry,
 )
@@ -12,6 +13,7 @@ __all__ = [
     "BusinessEntity",
     "Certification",
     "Dataset",
+    "DatasetColumn",
     "Metric",
     "Registry",
 ]

@@ -1,0 +1,22 @@
+id: pipeline.gold_order_revenue
+description: Publish completed-order (fully fulfilled) line revenue for Operations.
+owner: sales operations analytics
+output: gold.order_revenue
+inputs:
+  datasets: [silver.order_events]
+sql: |
+  SELECT
+      order_key, line_number, customer_key, part_key, product_brand, sales_region,
+      order_date,
+      receipt_date AS completed_date,
+      net_amount AS net_revenue
+  FROM {{ ref('silver.order_events') }}
+  WHERE order_status = 'F'
+quality_checks:
+  - {check: unique, columns: [order_key, line_number]}
+  - {check: range, column: net_revenue, min: 0}
+  - {check: row_count, min: 1}
+reconciliations:
+  - name: completed-order revenue ties to conformed order lines
+    expected_sql: SELECT SUM(net_amount) FROM {{ ref('silver.order_events') }} WHERE order_status = 'F'
+    actual_sql: SELECT SUM(net_revenue) FROM {{ this }}

@@ -26,6 +26,23 @@ The platform becomes easier and safer for AI to operate
 
 ## Current milestone
 
+**Milestone 6b — governed pipelines on real data volume.** Declarative pipeline specs build
+the registry's dataset contracts from TPC-H data (6M order lines at scale factor 1) with
+DuckDB. Every run passes contract, quality, and reconciliation gates before an atomic publish,
+then feeds freshness, quality, and verified lineage back into discovery. Agents can propose
+pipelines through MCP, validated and dry-run in a sandbox, but never publish. The same specs
+compile to a contract-enforced dbt project. See [governed pipelines](docs/governed-pipelines.md),
+[pipeline portability (dbt and Databricks)](docs/pipeline-portability.md), and the
+[live demo](demo/README.md):
+
+```bash
+python -m pip install -e ".[test,data,dbt]"
+python -m ai_data_platform sample-data tpch --scale 1
+python demo/showcase.py --pause
+```
+
+### Milestone 6 foundation
+
 Milestone 6 adds the first governed, repository-scoped **AI-native data engineering**
 capabilities. They sit on the Milestone 5 read-only Model Context Protocol (MCP) adapter:
 
@@ -46,7 +63,9 @@ structured tool result with governed status and reasons
 MCP contains no ranking, validation, or business policy of its own. It registers typed tool
 schemas and delegates every operation to the same capability and context services used by
 the Python and REST adapters. Discovery is capped at five candidates, registry paths remain
-server-controlled, and all published tools are annotated as read-only and non-destructive.
+server-controlled, and the context tools are annotated as read-only and non-destructive.
+Milestone 6b adds pipeline authoring tools; only `submit_pipeline_proposal` writes, and it only
+writes a review package.
 
 A key acceptance case is deliberately ambiguous:
 
@@ -117,7 +136,11 @@ registry/
   concepts/       canonical business concepts
   metrics/        canonical metric definitions
   entities/       canonical business entities
-  datasets/       dataset contracts referencing semantics
+  datasets/       dataset contracts referencing semantics, with column contracts
+
+pipelines/
+  sources.yaml    raw inputs landed from the data directory
+  specs/          one declarative pipeline per dataset contract
 
 src/ai_data_platform/
   models/         Pydantic contracts
@@ -131,18 +154,21 @@ src/ai_data_platform/
   agent_tools/    protocol-independent, read-only agent capability service
   mcp/            thin MCP server and stdio entry point
   engineering/    deterministic, repository-scoped DEV engineering capabilities
+  pipelines/      specs, SQL sandbox, DEV runner, lineage, agent authoring, dbt export
+  sample_data.py  TPC-H generation and NYC taxi download into var/data
   http/           thin FastAPI adapter
   policy/         centralized semantic, hybrid, and runtime ranking policy
   api.py          stable Python capability layer
 
 evaluation/       versioned retrieval and reasoning evaluation cases
+demo/             live showcase script, presenter guide, and agent proposals
 tests/            acceptance and unit tests
 ```
 
 ## Run Milestone 6
 
 ```bash
-python -m pip install -e ".[test]"
+python -m pip install -e ".[test]"   # add ,data,dbt for pipelines, sample data, and dbt
 python -m ai_data_platform validate
 python -m ai_data_platform discover "What was net revenue last quarter?"
 python -m ai_data_platform discover "What was net revenue last quarter?" --mode hybrid
@@ -207,7 +233,8 @@ replacement with deterministic rollback. It does not accept arbitrary commands o
 write Git metadata, or execute QA/production changes. See [Milestone 6 governed
 engineering capabilities](docs/milestone-6-ai-native-engineering.md).
 
-The MCP server uses standard input/output and publishes seven structured, read-only tools:
+The MCP server uses standard input/output and publishes seven structured, read-only context
+tools:
 
 - `discover_datasets`
 - `get_dataset_contract`
@@ -216,6 +243,11 @@ The MCP server uses standard input/output and publishes seven structured, read-o
 - `get_entity_definition`
 - `get_concept_definition`
 - `validate_metadata`
+
+With `pipelines/` configured (the default; override with `AI_DATA_PLATFORM_PIPELINES`), it adds
+governed pipeline tools: `list_pipeline_inputs`, `get_dataset_lineage`,
+`validate_pipeline_proposal`, and `dry_run_pipeline_proposal` (read-only), plus
+`submit_pipeline_proposal`, which queues a review package and never publishes.
 
 An MCP client can launch the installed entry point with configuration like:
 
@@ -288,6 +320,8 @@ M4  LLM reasoning over curated context
 M5  MCP/tool exposure for agents
  ↓
 M6  AI-native data engineering agents + safe high-level tools
+ ↓
+M6b Governed pipelines on real data + agent proposals + dbt export
  ↓
 M7  Snowflake mapping
  ↓

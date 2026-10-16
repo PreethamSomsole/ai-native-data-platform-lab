@@ -1,0 +1,24 @@
+id: pipeline.gold_customer_segment_revenue
+description: Recognized net revenue by customer market segment and fiscal quarter.
+owner: customer analytics
+output: gold.customer_segment_revenue
+inputs:
+  sources: [tpch.customer]
+  datasets: [silver.revenue_events]
+sql: |
+  SELECT
+      c.c_mktsegment AS market_segment,
+      strftime(e.event_date, '%Y') || '-Q' || CAST(quarter(e.event_date) AS VARCHAR) AS fiscal_quarter,
+      CAST(SUM(e.amount) AS DECIMAL(18, 2)) AS recognized_net_revenue,
+      COUNT(DISTINCT e.customer_key) AS customer_count
+  FROM {{ ref('silver.revenue_events') }} AS e
+  JOIN {{ source('tpch', 'customer') }} AS c ON c.c_custkey = e.customer_key
+  GROUP BY ALL
+quality_checks:
+  - {check: unique, columns: [market_segment, fiscal_quarter]}
+  - {check: accepted_values, column: market_segment, values: [AUTOMOBILE, BUILDING, FURNITURE, HOUSEHOLD, MACHINERY]}
+  - {check: row_count, min: 1}
+reconciliations:
+  - name: segment totals tie to recognized revenue events
+    expected_sql: SELECT SUM(amount) FROM {{ ref('silver.revenue_events') }}
+    actual_sql: SELECT SUM(recognized_net_revenue) FROM {{ this }}

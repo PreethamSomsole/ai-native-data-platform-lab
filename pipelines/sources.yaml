@@ -1,0 +1,34 @@
+# Raw inputs landed by the platform. Paths are relative to the server-configured data
+# directory (default var/data) and are never visible to transform SQL, which can only
+# read landed raw tables through {{ source('<system>', '<table>') }}.
+sources:
+  - id: tpch.lineitem
+    description: TPC-H order lines. The glob also lands late-arriving batch files.
+    format: parquet
+    path: tpch/lineitem*.parquet
+    owner: order data engineering
+  - id: tpch.orders
+    description: TPC-H order headers with order status and order date.
+    format: parquet
+    path: tpch/orders.parquet
+    owner: order data engineering
+  - id: tpch.customer
+    description: TPC-H customers.
+    format: parquet
+    path: tpch/customer.parquet
+    owner: customer data engineering
+  - id: tpch.part
+    description: TPC-H parts (products) with brand.
+    format: parquet
+    path: tpch/part.parquet
+    owner: product data engineering
+  - id: tpch.nation
+    description: TPC-H nations, used as booking legal entities.
+    format: parquet
+    path: tpch/nation.parquet
+    owner: reference data engineering
+  - id: tpch.region
+    description: TPC-H sales regions.
+    format: parquet
+    path: tpch/region.parquet
+    owner: reference data engineering
